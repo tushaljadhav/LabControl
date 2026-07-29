@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LabControl - Admin Dashboard</title>
+    <meta name="description" content="LabControl centralized power management dashboard for lab PCs">
+
+    <!-- Google Fonts — Inter for UI, JetBrains Mono for code/IPs -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Our custom stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- HEADER BAR                                                             -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<header class="header">
+    <div class="header-logo">
+        <div class="logo-icon">&#9889;</div>
+        <span>LabControl</span>
+    </div>
+    <div class="header-right">
+        <div class="refresh-indicator">
+            <div class="pulse-dot"></div>
+            <span id="refresh-status">Auto-refresh active</span>
+        </div>
+        <span id="last-refresh">Last updated: just now</span>
+    </div>
+</header>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- MAIN CONTENT                                                           -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<main class="main-content">
+
+    <!-- ── Summary Cards ──────────────────────────────────────────────── -->
+    <div class="summary-cards">
+        <div class="summary-card">
+            <div class="card-icon total">&#128187;</div>
+            <div class="card-info">
+                <h3 id="count-total">{{ pcs|length }}</h3>
+                <p>Total PCs</p>
+            </div>
+        </div>
+        <div class="summary-card">
+            <div class="card-icon online">&#9989;</div>
+            <div class="card-info">
+                <h3 id="count-online">{{ pcs|selectattr('status', 'equalto', 'online')|list|length }}</h3>
+                <p>Online</p>
+            </div>
+        </div>
+        <div class="summary-card">
+            <div class="card-icon offline">&#10060;</div>
+            <div class="card-info">
+                <h3 id="count-offline">{{ pcs|selectattr('status', 'equalto', 'offline')|list|length }}</h3>
+                <p>Offline</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Add PC Form (hidden by default) ────────────────────────────── -->
+    <div id="add-pc-form" class="add-pc-form">
+        <h4>+ Add New PC</h4>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="new-pc-name">PC Name</label>
+                <input type="text" id="new-pc-name" placeholder="e.g. Lab-PC-04">
+            </div>
+            <div class="form-group">
+                <label for="new-pc-ip">IP Address</label>
+                <input type="text" id="new-pc-ip" placeholder="e.g. 192.168.1.14">
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="addPC()">Add</button>
+            <button class="btn btn-secondary btn-sm" onclick="toggleAddForm()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- ── Action Toolbar ─────────────────────────────────────────────── -->
+    <div class="toolbar">
+        <div class="toolbar-group">
+            <button class="btn btn-secondary btn-sm" onclick="selectAll()">Select All</button>
+            <button class="btn btn-secondary btn-sm" onclick="deselectAll()">Deselect All</button>
+        </div>
+        <div class="toolbar-group">
+            <button class="btn btn-danger" onclick="confirmCommand('shutdown')">
+                &#9211; Shutdown Selected
+            </button>
+            <button class="btn btn-warning" onclick="confirmCommand('restart')">
+                &#8635; Restart Selected
+            </button>
+            <button class="btn btn-info" onclick="confirmCommand('sleep')">
+                &#128164; Sleep Selected
+            </button>
+            <button class="btn btn-secondary" onclick="confirmCommand('cancel')">
+                &#10005; Cancel Pending
+            </button>
+        </div>
+        <div class="toolbar-spacer"></div>
+        <button class="btn btn-primary btn-sm" onclick="toggleAddForm()">+ Add PC</button>
+    </div>
+
+    <!-- ── PC Table ───────────────────────────────────────────────────── -->
+    <div class="table-container">
+        <table class="pc-table">
+            <thead>
+                <tr>
+                    <th style="width:40px"><input type="checkbox" id="check-all" onchange="toggleAll(this)"></th>
+                    <th>Name</th>
+                    <th>IP Address</th>
+                    <th>Status</th>
+                    <th>Last Seen</th>
+                </tr>
+            </thead>
+            <tbody id="pc-table-body">
+                {% for pc in pcs %}
+                <tr>
+                    <td><input type="checkbox" class="pc-checkbox" value="{{ pc.id }}"></td>
+                    <td><strong>{{ pc.name }}</strong></td>
+                    <td class="ip-cell">{{ pc.ip }}</td>
+                    <td>
+                        {% if pc.status == 'online' %}
+                            <span class="status-badge status-online"><span class="dot"></span>Online</span>
+                        {% elif pc.status == 'offline' %}
+                            <span class="status-badge status-offline"><span class="dot"></span>Offline</span>
+                        {% elif pc.status == 'error' or pc.status == 'unauthorized' %}
+                            <span class="status-badge status-error"><span class="dot"></span>{{ pc.status|capitalize }}</span>
+                        {% else %}
+                            <span class="status-badge status-unknown"><span class="dot"></span>Unknown</span>
+                        {% endif %}
+                    </td>
+                    <td class="last-seen">{{ pc.last_seen or 'Never' }}</td>
+                </tr>
+                {% endfor %}
+
+                {% if not pcs %}
+                <tr>
+                    <td colspan="5" class="empty-state">
+                        <p>No PCs registered yet. Click "+ Add PC" to get started.</p>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ── Recent Activity Log ────────────────────────────────────────── -->
+    <div class="section-header">
+        <h2 class="section-title">&#128203; Recent Activity</h2>
+        <button class="btn btn-secondary btn-sm" onclick="refreshLogs()">Refresh</button>
+    </div>
+    <div class="table-container">
+        <table class="log-table">
+            <thead>
+                <tr>
+                    <th>PC Name</th>
+                    <th>Command</th>
+                    <th>Status</th>
+                    <th>Timestamp</th>
+                </tr>
+            </thead>
+            <tbody id="log-table-body">
+                {% for log in logs %}
+                <tr>
+                    <td><strong>{{ log.pc_name }}</strong></td>
+                    <td><span class="log-command">{{ log.command }}</span></td>
+                    <td>
+                        <span class="log-status-{{ log.status }}">{{ log.status|upper }}</span>
+                    </td>
+                    <td class="log-time">{{ log.timestamp }}</td>
+                </tr>
+                {% endfor %}
+
+                {% if not logs %}
+                <tr>
+                    <td colspan="4" class="empty-state">
+                        <p>No activity yet. Send a command to see logs here.</p>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+</main>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- CONFIRMATION MODAL                                                     -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div id="confirm-modal" class="modal-overlay">
+    <div class="modal">
+        <h3 id="modal-title">Confirm Action</h3>
+        <p id="modal-message">Are you sure?</p>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-danger" id="modal-confirm-btn" onclick="executeCommand()">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- TOAST NOTIFICATIONS                                                    -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div id="toast-container" class="toast-container"></div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- JAVASCRIPT — All dashboard interactivity                               -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<script>
+/*
+ * This script handles:
+ *  1. Selecting/deselecting PCs via checkboxes
+ *  2. Sending commands to selected PCs via the API
+ *  3. Showing confirmation modals before dangerous actions
+ *  4. Auto-refreshing the PC table every 5 seconds
+ *  5. Adding new PCs via the form
+ *  6. Toast notifications for feedback
+ *
+ * It uses the Fetch API (built into all modern browsers) to call
+ * our Flask API endpoints without reloading the page.
+ */
+
+// ── State ───────────────────────────────────────────────────────────
+let pendingCommand = null;  // Stores the command waiting for confirmation
+let refreshTimer = null;    // The auto-refresh interval ID
+let lastRefreshTime = Date.now();
+
+// ── Checkbox helpers ────────────────────────────────────────────────
+
+/** Get all checked PC IDs as an array of numbers */
+function getSelectedIds() {
+    const checkboxes = document.querySelectorAll('.pc-checkbox:checked');
+    return Array.from(checkboxes).map(cb => parseInt(cb.value));
+}
+
+/** Check all PC checkboxes */
+function selectAll() {
+    document.querySelectorAll('.pc-checkbox').forEach(cb => cb.checked = true);
+    document.getElementById('check-all').checked = true;
+}
+
+/** Uncheck all PC checkboxes */
+function deselectAll() {
+    document.querySelectorAll('.pc-checkbox').forEach(cb => cb.checked = false);
+    document.getElementById('check-all').checked = false;
+}
+
+/** Toggle all checkboxes when the header checkbox is clicked */
+function toggleAll(headerCheckbox) {
+    document.querySelectorAll('.pc-checkbox').forEach(cb => {
+        cb.checked = headerCheckbox.checked;
+    });
+}
+
+// ── Command flow ────────────────────────────────────────────────────
+
+/**
+ * Step 1: User clicks a command button (e.g. "Shutdown Selected").
+ * We check if any PCs are selected, then show a confirmation modal.
+ */
+function confirmCommand(command) {
+    const ids = getSelectedIds();
+
+    if (ids.length === 0) {
+        showToast('No PCs selected. Use checkboxes to select PCs first.', 'error');
+        return;
+    }
+
+    // Store the command so executeCommand() can use it after confirmation
+    pendingCommand = { command: command, pc_ids: ids };
+
+    // Customize the modal text based on the command
+    const titles = {
+        shutdown: 'Confirm Shutdown',
+        restart:  'Confirm Restart',
+        sleep:    'Confirm Sleep',
+        cancel:   'Cancel Pending Actions'
+    };
+
+    const messages = {
+        shutdown: `This will SHUT DOWN ${ids.length} PC(s). They will turn off in 5 seconds.`,
+        restart:  `This will RESTART ${ids.length} PC(s). They will reboot in 5 seconds.`,
+        sleep:    `This will put ${ids.length} PC(s) to SLEEP.`,
+        cancel:   `This will cancel any pending shutdown/restart on ${ids.length} PC(s). This is safe.`
+    };
+
+    document.getElementById('modal-title').textContent = titles[command] || 'Confirm';
+    document.getElementById('modal-message').textContent = messages[command] || 'Are you sure?';
+
+    // Color the confirm button based on severity
+    const confirmBtn = document.getElementById('modal-confirm-btn');
+    confirmBtn.className = 'btn';
+    if (command === 'shutdown') confirmBtn.classList.add('btn-danger');
+    else if (command === 'restart') confirmBtn.classList.add('btn-warning');
+    else if (command === 'sleep') confirmBtn.classList.add('btn-info');
+    else confirmBtn.classList.add('btn-secondary');
+
+    document.getElementById('confirm-modal').classList.add('active');
+}
+
+/**
+ * Step 2: User clicks "Confirm" in the modal.
+ * We send the command to the API and handle the response.
+ */
+async function executeCommand() {
+    if (!pendingCommand) return;
+
+    closeModal();
+
+    const { command, pc_ids } = pendingCommand;
+    pendingCommand = null;
+
+    showToast(`Sending ${command.toUpperCase()} to ${pc_ids.length} PC(s)...`, 'info');
+
+    try {
+        // Call our Flask API endpoint
+        const response = await fetch('/api/command', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: command, pc_ids: pc_ids })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            const s = data.summary;
+            showToast(
+                `${command.toUpperCase()}: ${s.success} success, ${s.offline} offline, ${s.error} errors`,
+                s.success > 0 ? 'success' : 'error'
+            );
+
+            // Refresh the tables to show updated status
+            refreshPCs();
+            refreshLogs();
+        } else {
+            showToast(`Error: ${data.error}`, 'error');
+        }
+    } catch (err) {
+        showToast(`Network error: ${err.message}`, 'error');
+    }
+}
+
+/** Close the confirmation modal */
+function closeModal() {
+    document.getElementById('confirm-modal').classList.remove('active');
+}
+
+// ── Auto-refresh ────────────────────────────────────────────────────
+
+/**
+ * Fetch the latest PC list from the API and update the table.
+ * This runs every 5 seconds so the dashboard stays live without reloading.
+ */
+async function refreshPCs() {
+    try {
+        const response = await fetch('/api/pcs');
+        const pcs = await response.json();
+
+        updatePCTable(pcs);
+        updateSummaryCounts(pcs);
+
+        lastRefreshTime = Date.now();
+        document.getElementById('last-refresh').textContent = 'Last updated: just now';
+    } catch (err) {
+        console.error('Failed to refresh PCs:', err);
+    }
+}
+
+/** Rebuild the PC table body with fresh data */
+function updatePCTable(pcs) {
+    const tbody = document.getElementById('pc-table-body');
+
+    // Remember which checkboxes were checked before refresh
+    const checkedIds = getSelectedIds();
+
+    if (pcs.length === 0) {
+        tbody.innerHTML = `
+            <tr><td colspan="5" class="empty-state">
+                <p>No PCs registered yet. Click "+ Add PC" to get started.</p>
+            </td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = pcs.map(pc => {
+        const isChecked = checkedIds.includes(pc.id) ? 'checked' : '';
+
+        let badgeClass, badgeText;
+        if (pc.status === 'online') {
+            badgeClass = 'status-online'; badgeText = 'Online';
+        } else if (pc.status === 'offline') {
+            badgeClass = 'status-offline'; badgeText = 'Offline';
+        } else if (pc.status === 'error' || pc.status === 'unauthorized') {
+            badgeClass = 'status-error'; badgeText = pc.status.charAt(0).toUpperCase() + pc.status.slice(1);
+        } else {
+            badgeClass = 'status-unknown'; badgeText = 'Unknown';
+        }
+
+        return `
+            <tr>
+                <td><input type="checkbox" class="pc-checkbox" value="${pc.id}" ${isChecked}></td>
+                <td><strong>${escapeHTML(pc.name)}</strong></td>
+                <td class="ip-cell">${escapeHTML(pc.ip)}</td>
+                <td><span class="status-badge ${badgeClass}"><span class="dot"></span>${badgeText}</span></td>
+                <td class="last-seen">${pc.last_seen || 'Never'}</td>
+            </tr>`;
+    }).join('');
+}
+
+/** Update the summary cards (Total / Online / Offline) */
+function updateSummaryCounts(pcs) {
+    document.getElementById('count-total').textContent = pcs.length;
+    document.getElementById('count-online').textContent = pcs.filter(p => p.status === 'online').length;
+    document.getElementById('count-offline').textContent = pcs.filter(p => p.status === 'offline').length;
+}
+
+/** Fetch and update the activity log table */
+async function refreshLogs() {
+    try {
+        const response = await fetch('/api/logs');
+        const logs = await response.json();
+
+        const tbody = document.getElementById('log-table-body');
+
+        if (logs.length === 0) {
+            tbody.innerHTML = `
+                <tr><td colspan="4" class="empty-state">
+                    <p>No activity yet. Send a command to see logs here.</p>
+                </td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = logs.map(log => {
+            let statusClass = 'log-status-' + log.status;
+            return `
+                <tr>
+                    <td><strong>${escapeHTML(log.pc_name)}</strong></td>
+                    <td><span class="log-command">${escapeHTML(log.command)}</span></td>
+                    <td><span class="${statusClass}">${log.status.toUpperCase()}</span></td>
+                    <td class="log-time">${escapeHTML(log.timestamp)}</td>
+                </tr>`;
+        }).join('');
+    } catch (err) {
+        console.error('Failed to refresh logs:', err);
+    }
+}
+
+// Update the "Last updated: X seconds ago" text every second
+setInterval(() => {
+    const seconds = Math.floor((Date.now() - lastRefreshTime) / 1000);
+    if (seconds < 5) {
+        document.getElementById('last-refresh').textContent = 'Last updated: just now';
+    } else {
+        document.getElementById('last-refresh').textContent = `Last updated: ${seconds}s ago`;
+    }
+}, 1000);
+
+// Auto-refresh PCs every 5 seconds
+refreshTimer = setInterval(refreshPCs, 5000);
+
+// ── Add PC ──────────────────────────────────────────────────────────
+
+/** Toggle the Add PC form visibility */
+function toggleAddForm() {
+    document.getElementById('add-pc-form').classList.toggle('active');
+}
+
+/** Submit the Add PC form to the API */
+async function addPC() {
+    const name = document.getElementById('new-pc-name').value.trim();
+    const ip = document.getElementById('new-pc-ip').value.trim();
+
+    if (!name || !ip) {
+        showToast('Please enter both a name and IP address.', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/pcs/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, ip: ip })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showToast(`Added: ${name} (${ip})`, 'success');
+            document.getElementById('new-pc-name').value = '';
+            document.getElementById('new-pc-ip').value = '';
+            toggleAddForm();
+            refreshPCs();  // Refresh table to show the new PC
+        } else {
+            showToast(`Error: ${data.error}`, 'error');
+        }
+    } catch (err) {
+        showToast(`Network error: ${err.message}`, 'error');
+    }
+}
+
+// ── Toast notifications ─────────────────────────────────────────────
+
+/**
+ * Show a temporary notification message at the bottom-right corner.
+ * Type can be: 'success', 'error', or 'info'.
+ * The toast auto-disappears after 4 seconds.
+ */
+function showToast(message, type) {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+
+    // Remove after 4 seconds
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(30px)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
+// ── Utility ─────────────────────────────────────────────────────────
+
+/** Escape HTML to prevent XSS when inserting user data into the page */
+function escapeHTML(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+</script>
+
+</body>
+</html>

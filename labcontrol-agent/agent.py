@@ -128,7 +128,7 @@ def heartbeat_sender():
     heartbeat_url = f"{LABCONTROL_SERVER_URL}/api/agent/heartbeat"
     hostname = socket.gethostname()
 
-    print(f"  [AUTO-DISCOVERY] Heartbeat sender started → {heartbeat_url}")
+    print(f"  [AUTO-DISCOVERY] Heartbeat sender started -> {heartbeat_url}")
     print(f"  [AUTO-DISCOVERY] This PC: hostname={hostname}")
 
     while True:
@@ -155,9 +155,9 @@ def heartbeat_sender():
 
             action = resp_data.get("action", "")
             if action == "registered":
-                print(f"  [AUTO-DISCOVERY] ✅ Registered as new PC: '{resp_data.get('name')}' (id={resp_data.get('pc_id')})")
+                print(f"  [AUTO-DISCOVERY] [OK] Registered as new PC: '{resp_data.get('name')}' (id={resp_data.get('pc_id')})")
             elif action == "updated" and "updated to" in resp_data.get("message", ""):
-                print(f"  [AUTO-DISCOVERY] 🔄 IP auto-updated on server: {local_ip}")
+                print(f"  [AUTO-DISCOVERY] [UPDATED] IP auto-updated on server: {local_ip}")
             # Silent for normal heartbeats (no spam)
 
         except URLError:
@@ -289,7 +289,7 @@ def record_failed_attempt(ip_str):
 
     if len(attempts) >= 5:
         lockout_until[ip_str] = now + 300  # Lockout for 300 seconds (5 minutes)
-        print(f"🔒 [SECURITY ALERT / LOCKOUT] IP {ip_str} locked out for 5 minutes (300s) due to {len(attempts)} failed authentication attempts.")
+        print(f"[SECURITY ALERT / LOCKOUT] IP {ip_str} locked out for 5 minutes (300s) due to {len(attempts)} failed authentication attempts.")
 
 
 def send_encrypted_response(client_socket, response_dict):
@@ -312,7 +312,7 @@ def handle_client(client_socket, client_address):
 
     # Reject connection immediately if IP is currently locked out
     if is_ip_locked_out(client_ip):
-        print(f"🛑 [SECURITY LOCKOUT] Rejected request from locked-out IP: {client_ip}")
+        print(f"[SECURITY LOCKOUT] Rejected request from locked-out IP: {client_ip}")
         client_socket.close()
         return
 
@@ -325,12 +325,12 @@ def handle_client(client_socket, client_address):
         try:
             decrypted_bytes = fernet.decrypt(raw_encrypted_data)
         except InvalidToken:
-            print(f"⚠️ [SECURITY WARNING] Decryption failed for {client_address}! Invalid secret key or tampered data.")
+            print(f"[SECURITY WARNING] Decryption failed for {client_address}! Invalid secret key or tampered data.")
             record_failed_attempt(client_ip)
             send_encrypted_response(client_socket, {"status": "unauthorized", "message": "Decryption failed"})
             return
         except Exception as e:
-            print(f"⚠️ [SECURITY ERROR] Unexpected decryption error for {client_address}: {e}")
+            print(f"[SECURITY ERROR] Unexpected decryption error for {client_address}: {e}")
             record_failed_attempt(client_ip)
             send_encrypted_response(client_socket, {"status": "error", "message": "Decryption error"})
             return
@@ -670,7 +670,7 @@ def start_agent():
     print(f"  Encryption: Fernet (AES-128-CBC + HMAC-SHA256)")
     print(f"  Brute-Force Protection: Active (5 fails / 60s -> 5m lockout)")
     if LABCONTROL_SERVER_URL:
-        print(f"  Auto-Discovery: ON → {LABCONTROL_SERVER_URL} (every {HEARTBEAT_INTERVAL}s)")
+        print(f"  Auto-Discovery: ON -> {LABCONTROL_SERVER_URL} (every {HEARTBEAT_INTERVAL}s)")
         print(f"  Local IP: {get_local_ip()} | MAC: {get_mac_address()} | Host: {socket.gethostname()}")
     else:
         print(f"  Auto-Discovery: OFF (set LABCONTROL_SERVER_URL in .env to enable)")

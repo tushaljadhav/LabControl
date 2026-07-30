@@ -1,6 +1,6 @@
 @echo off
 :: ============================================================================
-::  LabControl Agent — 1-Click Permanent Auto-Installer (v3.1)
+::  LabControl Agent — 1-Click Permanent Auto-Installer (v3.2)
 :: ============================================================================
 
 title LabControl Agent Installer
@@ -26,29 +26,29 @@ echo.
 set "AGENT_DIR=%~dp0"
 if "%AGENT_DIR:~-1%"=="\" set "AGENT_DIR=%AGENT_DIR:~0,-1%"
 
-:: 1. Deep Search for python.exe & pythonw.exe
+:: 1. Precise Search for python.exe & pythonw.exe using active Python interpreter
 echo [1/5] Detecting Python installation path...
 set "PYTHON_PATH="
 set "PYTHONW_PATH="
 
-for /d %%d in ("%LOCALAPPDATA%\Programs\Python\Python*" "C:\Program Files\Python*" "C:\Program Files (x86)\Python*" "C:\Python*") do (
-    if exist "%%d\python.exe" (
-        set "PYTHON_PATH=%%d\python.exe"
-        set "PYTHONW_PATH=%%d\pythonw.exe"
-        goto :FOUND_PYTHON
+for /f "delims=" %%i in ('python -c "import sys; print(sys.executable)" 2^>nul') do (
+    set "PYTHON_PATH=%%i"
+)
+
+if not "%PYTHON_PATH%"=="" (
+    for /f "delims=" %%i in ('python -c "import sys, os; p=sys.executable.replace('python.exe','pythonw.exe'); print(p if os.path.exists(p) else sys.executable)" 2^>nul') do (
+        set "PYTHONW_PATH=%%i"
     )
 )
 
-where python >nul 2>&1
-if %errorlevel% equ 0 (
-    for /f "delims=" %%i in ('where python') do (
-        set "PYTHON_PATH=%%i"
-    )
-)
-where pythonw >nul 2>&1
-if %errorlevel% equ 0 (
-    for /f "delims=" %%i in ('where pythonw') do (
-        set "PYTHONW_PATH=%%i"
+:: Fallback search if python command wasn't in PATH
+if "%PYTHON_PATH%"=="" (
+    for /d %%d in ("%LOCALAPPDATA%\Programs\Python\Python*" "C:\Program Files\Python*" "C:\Program Files (x86)\Python*" "C:\Python*") do (
+        if exist "%%d\python.exe" (
+            set "PYTHON_PATH=%%d\python.exe"
+            set "PYTHONW_PATH=%%d\pythonw.exe"
+            goto :FOUND_PYTHON
+        )
     )
 )
 
@@ -65,6 +65,7 @@ if "%PYTHON_PATH%"=="" (
 if "%PYTHONW_PATH%"=="" set "PYTHONW_PATH=%PYTHON_PATH%"
 
 echo       [OK] Found Python at: %PYTHON_PATH%
+echo       [OK] Found PythonW at: %PYTHONW_PATH%
 
 :: 2. Auto-Install Required Python Dependencies
 echo [2/5] Installing Python dependencies (cryptography, psutil, python-dotenv)...
@@ -87,7 +88,7 @@ set "AGENT_PY=%AGENT_DIR%\agent.py"
 echo Set WshShell = CreateObject("WScript.Shell") > "%VBS_PATH%"
 echo WshShell.CurrentDirectory = "%AGENT_DIR%" >> "%VBS_PATH%"
 echo WshShell.Run """%PYTHONW_PATH%"" ""%AGENT_PY%""", 0, False >> "%VBS_PATH%"
-echo       [OK] Generated start_silent.vbs.
+echo       [OK] Generated start_silent.vbs with verified paths.
 
 :: 5. Register Triple Permanent Auto-Start (Task Scheduler + Startup Folder + Registry Run Key)
 echo [5/5] Registering Permanent Auto-Start on System Boot...

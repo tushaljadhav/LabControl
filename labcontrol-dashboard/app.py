@@ -8,6 +8,7 @@ lab management, PC edit/delete, and Wake-on-LAN (WOL) magic packet endpoints.
 
 import sys
 import os
+import json
 import threading
 import time
 import io
@@ -32,7 +33,8 @@ from database import migrate_add_labs, add_lab, get_all_labs, get_pcs_by_lab, de
 from database import migrate_add_users, get_user_by_id, verify_user_password
 from database import migrate_add_2fa, set_2fa_secret, enable_2fa, disable_2fa
 from database import migrate_add_schedules, add_schedule, get_all_schedules, delete_schedule, toggle_schedule_active
-from command_sender import send_to_pcs, check_pc_health, check_all_pcs_health, send_wol_packet
+from database import get_pc_by_mac
+from command_sender import send_to_pcs, check_pc_health, check_all_pcs_health, send_wol_packet, SECRET_KEY_STR
 from file_deployer import deploy_files_to_pcs
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -46,8 +48,30 @@ app = Flask(__name__)
 # Secret key for session management
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "labcontrol-session-secret-key-2026")
 
-# Configure CORS to allow cookies/credentials from React frontend
-CORS(app, supports_credentials=True, origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8080"])
+# Configure CORS to allow cookies/credentials from React frontend on any LAN origin
+# Note: `credentials: 'include'` in fetch() requires an EXACT origin match (not wildcard '*').
+# Since this is an internal LAN admin tool, we dynamically reflect the requesting Origin header.
+CORS(app, supports_credentials=True, origins=[
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8080"
+])
+
+@app.after_request
+def add_cors_headers(response):
+    """
+    Dynamic CORS origin reflection for LAN access.
+    When the frontend is accessed via a LAN IP (e.g., http://192.168.1.143:5173),
+    flask-cors's static list won't match. This handler reflects the actual Origin
+    header back, enabling credentialed cross-origin requests from any LAN device.
+    """
+    origin = request.headers.get("Origin")
+    if origin:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    return response
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Flask-Login Configuration
@@ -94,6 +118,104 @@ def background_health_checker():
         except Exception as e:
             print(f"[HEALTH CHECK ERROR] {e}")
         time.sleep(3)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# AUTO-DISCOVERY: Agent Heartbeat Endpoint (No Login Required)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/agent/heartbeat", methods=["POST"])
+def api_agent_heartbeat():
+    """
+    Auto-Discovery heartbeat endpoint for Lab PC agents.
+    
+    NO @login_required — agents don't have user accounts.
+    Instead, validates the shared Fernet secret key for authentication.
+    
+    The agent sends its IP, MAC address, and hostname every 30 seconds.
+    - If a PC with this MAC already exists → update its IP (handles DHCP changes!)
+    - If this MAC is new → auto-create a new PC entry in 'Unassigned Lab'
+    
+    Request JSON:
+        { "hostname": "LAB-PC-01", "ip": "192.168.1.120", "mac_address": "C4:75:AB:3D:37:9F", "secret_key": "..." }
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON data received"}), 400
+
+    # ── Validate secret key (agent authentication) ────────────────────────
+    agent_key = data.get("secret_key", "").strip()
+    if not agent_key or agent_key != SECRET_KEY_STR:
+        return jsonify({"error": "Invalid or missing secret key"}), 403
+
+    hostname = data.get("hostname", "").strip()
+    ip = data.get("ip", "").strip()
+    mac_address = data.get("mac_address", "").strip()
+
+    if not ip or not mac_address:
+        return jsonify({"error": "ip and mac_address are required"}), 400
+
+    # ── Check if a PC with this MAC already exists ────────────────────────
+    existing_pc = get_pc_by_mac(mac_address)
+
+    if existing_pc:
+        # PC exists → update IP if it changed + mark as online
+        pc_id = existing_pc["id"]
+        old_ip = existing_pc["ip"]
+
+        if old_ip != ip:
+            # IP changed (DHCP reassigned!) → auto-update it
+            update_pc(pc_id, ip_address=ip)
+            print(f"[AUTO-DISCOVERY] IP updated for '{existing_pc['name']}': {old_ip} → {ip}")
+
+        update_pc_status(pc_id, "online")
+
+        return jsonify({
+            "status": "success",
+            "action": "updated",
+            "pc_id": pc_id,
+            "name": existing_pc["name"],
+            "message": f"Heartbeat OK — IP {'updated to ' + ip if old_ip != ip else 'unchanged'}"
+        })
+
+    else:
+        # New PC → auto-register with hostname as default name
+        # Admin will rename and assign lab later from the Dashboard
+        pc_name = hostname or f"Auto-{mac_address[-8:]}"
+
+        # Find the 'Unassigned Lab' to put the new PC in
+        all_labs = get_all_labs()
+        unassigned_lab = next((l for l in all_labs if l["name"] == "Unassigned Lab"), None)
+        default_lab_id = unassigned_lab["id"] if unassigned_lab else None
+
+        pc_id = add_pc(pc_name, ip, mac_address=mac_address, lab_id=default_lab_id)
+
+        if pc_id is None:
+            # IP already exists (edge case: different MAC, same IP)
+            # Update the existing PC's MAC address instead
+            all_pcs = get_all_pcs()
+            for pc in all_pcs:
+                if pc["ip"] == ip:
+                    update_pc(pc["id"], mac_address=mac_address)
+                    update_pc_status(pc["id"], "online")
+                    return jsonify({
+                        "status": "success",
+                        "action": "mac_updated",
+                        "pc_id": pc["id"],
+                        "message": f"MAC address saved for existing PC '{pc['name']}'"
+                    })
+            return jsonify({"error": "Could not register PC"}), 500
+
+        update_pc_status(pc_id, "online")
+        print(f"[AUTO-DISCOVERY] New PC registered: '{pc_name}' ({ip}) MAC={mac_address}")
+
+        return jsonify({
+            "status": "success",
+            "action": "registered",
+            "pc_id": pc_id,
+            "name": pc_name,
+            "message": f"New PC auto-registered! Admin can rename and assign lab from Dashboard."
+        }), 201
 
 
 # ══════════════════════════════════════════════════════════════════════════════

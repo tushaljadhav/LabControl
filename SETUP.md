@@ -1,48 +1,166 @@
 # LabControl Setup & User Guide
 
-This guide covers setting up the LabControl dashboard, background agents, and Wake-on-LAN (WOL).
+This guide covers setting up the LabControl dashboard, running all components, agent installation, and Wake-on-LAN (WOL).
 
 ---
 
-## 🚀 Quick Start
+## 📋 Prerequisites (One-Time Install)
 
-### Prerequisites
-- **Python 3.6+**
-- **Node.js 18+**
+| Software | Version | Download |
+|----------|---------|----------|
+| **Python** | 3.6 or higher | https://www.python.org/downloads/ |
+| **Node.js** | 18 or higher | https://nodejs.org/ |
 
-### Step 1: Start the Flask Backend
-Open a terminal and run:
+---
 
-```bash
-cd labcontrol-dashboard
-pip install -r requirements.txt
+## 🚀 How to Start LabControl (Every Time)
+
+You need to run **2 things on your Admin PC** (in 2 separate terminals).
+
+### 🖥️ Terminal 1 — Flask Backend API Server
+
+```powershell
+cd c:\Users\Tushal\Desktop\LabControl\labcontrol-dashboard
 python app.py
 ```
-*(Runs on port 8080)*
 
-### Step 2: Start the React Frontend
-Open a **SECOND** terminal window and run:
+- ✅ Runs on: **http://localhost:8080**
+- ✅ This is the backend API that talks to all Lab PC agents
+- ✅ Keep this terminal OPEN (don't close it)
 
-```bash
-cd labcontrol-frontend
-npm install
+### 🌐 Terminal 2 — React Frontend Dashboard
+
+```powershell
+cd c:\Users\Tushal\Desktop\LabControl\labcontrol-frontend
 npm run dev
 ```
-*(Runs on port 5173)*
 
-### Step 3: Access the Dashboard
-Open your web browser and navigate to:
-**`http://localhost:5173`**
+- ✅ Runs on: **http://localhost:5173**
+- ✅ This is the Dashboard UI you open in the browser
+- ✅ Keep this terminal OPEN (don't close it)
+
+### 🌍 Step 3 — Open the Dashboard
+
+Open your browser and go to:
+- **From your own PC:** `http://localhost:5173`
+- **From any other PC on same Wi-Fi/LAN:** `http://<your-pc-ip>:5173` (e.g., `http://192.168.1.143:5173`)
+
+### 🔐 Default Login Credentials
+
+| Field | Value |
+|-------|-------|
+| **Username** | `admin` |
+| **Password** | `admin` |
+
+> ⚠️ Change the default password after first login for security!
 
 ---
 
-## 🖥️ Target PC Agent Installation
+## 🤖 Terminal 3 — Agent (Target/Dost ke Lab PC par)
 
-To control target PCs automatically on system boot:
+This runs on **each Lab PC you want to control** (NOT on your Admin PC).
 
-1. Copy the `labcontrol-agent` folder to the target PC.
-2. Right-click **`install_agent.bat`** and select **"Run as Administrator"**.
-3. Done! The agent will run silently in the background and automatically start whenever the PC boots or restarts.
+### First-Time Setup (One Time Only)
+
+1. Copy the entire `labcontrol-agent` folder to the target Lab PC.
+2. Open a terminal on that Lab PC and run:
+
+```powershell
+cd labcontrol-agent
+pip install -r requirements.txt
+```
+
+3. Create a `.env` file inside `labcontrol-agent` folder with this content:
+
+```env
+LABCONTROL_SECRET_KEY=mRBEOUI43W4N2BWOjGPhT46c-GR6QC5MZRcVXVipnwc=
+LABCONTROL_SERVER_URL=http://192.168.1.143:8080
+```
+
+| Variable | Value | Description |
+|----------|-------|-------------|
+| `LABCONTROL_SECRET_KEY` | Must match server's key | Security encryption key |
+| `LABCONTROL_SERVER_URL` | `http://<admin-pc-ip>:8080` | Admin PC ka IP + port (for Auto-Discovery) |
+
+> ⚠️ Secret key MUST match the server's key, otherwise PC will show as "Unauth".
+> 
+> 💡 `LABCONTROL_SERVER_URL` mein apne Admin PC ka IP daalo (jo `ipconfig` se milta hai).
+
+### 🔄 Auto-Discovery (Automatic IP + MAC Registration)
+
+Jab agent start hota hai, yeh **automatically**:
+1. Apna **IP address**, **MAC address**, aur **Computer Name** detect karta hai
+2. Har **30 seconds** mein server ko bhejta hai
+3. **Dashboard mein PC automatically appear** ho jata hai! 🎉
+4. Agar IP change ho jaye (DHCP) → **automatically update** ho jayega
+
+**Admin sirf yeh karta hai:**
+- PC ka **Name** edit kare (e.g., "Rahul-PC")
+- PC ko **Lab assign** kare (e.g., "Lab 1")
+
+### Run the Agent (Every Time)
+
+**Option A — Manual Run (Terminal):**
+```powershell
+cd labcontrol-agent
+python agent.py
+```
+- ✅ Listens on Port **5555** (Commands: shutdown, restart, sleep, cancel, stats, apps)
+- ✅ Listens on Port **5556** (File transfers: deploy files/folders)
+- ✅ Keep this terminal OPEN on the Lab PC
+
+**Option B — Auto-Start on Boot (Recommended for Lab PCs):**
+1. Right-click **`install_agent.bat`** → **Run as Administrator**
+2. Done! Agent will silently auto-start every time the PC boots.
+
+**To Stop/Uninstall Auto-Start:**
+- Run **`uninstall_agent.bat`** as Administrator.
+
+---
+
+## 📡 Adding a Lab PC to Dashboard
+
+After the agent is running on a Lab PC:
+
+1. Find the Lab PC's IP address:
+   - On the Lab PC, open CMD and type: `ipconfig`
+   - Note the **IPv4 Address** (e.g., `192.168.1.120`)
+
+2. On your Dashboard:
+   - Click **"+ Add PC"**
+   - Enter PC Name (e.g., `Rahul-PC`)
+   - Enter IP Address (e.g., `192.168.1.120`)
+   - Select Lab
+   - Click **Add PC**
+
+3. Click **"Check Status"** 🔄 — the PC should show **🟢 ONLINE**
+
+---
+
+## 🎯 What You Can Do from Dashboard
+
+| Feature | Button | Description |
+|---------|--------|-------------|
+| **Check Status** | 🔄 Check Status | Ping all PCs to see online/offline |
+| **Shutdown** | ⏻ Shutdown | Shutdown selected PCs (10s countdown) |
+| **Restart** | 🔄 Restart | Restart selected PCs (10s countdown) |
+| **Sleep** | 🌙 Sleep | Put selected PCs to sleep (10s countdown) |
+| **Wake-on-LAN** | ⚡ Wake Selected | Turn ON powered-off PCs remotely |
+| **Live Stats** | 📈 Stats button on PC row | View CPU, RAM, Disk, Uptime live |
+| **Remote Apps** | 🚀 Remote Apps | Launch/Close apps on PCs (Calculator, Notepad, etc.) |
+| **Deploy Files** | 📦 Deploy Files | Send files/folders to all PCs |
+| **Schedules** | 🕐 Schedules | Auto shutdown/restart at specific times |
+| **2FA Security** | 🔒 Security in Sidebar | Enable Google Authenticator for login |
+
+---
+
+## 🛑 How to Stop LabControl
+
+| What | How to Stop |
+|------|------------|
+| **Terminal 1 (Backend)** | Press `Ctrl + C` in the terminal |
+| **Terminal 2 (Frontend)** | Press `Ctrl + C` in the terminal |
+| **Terminal 3 (Agent)** | Press `Ctrl + C` on the Lab PC |
 
 ---
 
@@ -85,3 +203,15 @@ On the Target PC:
 
 - **Desktop PCs (Ethernet LAN Cable):** Ethernet ports maintain standby motherboard power even when fully **Shut Down (Off)**. `⚡ Wake Selected` will turn ON fully shutdown lab PCs!
 - **Wi-Fi Laptops:** Laptops turn off Wi-Fi power during full shutdown to preserve battery. Wi-Fi laptops wake up from **Sleep / Standby Mode** (or Lid Closed).
+
+---
+
+## 🔧 Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| PC shows **Unauth** | `.env` file missing or secret key mismatch — check both server & agent `.env` files |
+| PC shows **Offline** | Agent not running on that PC, or PC not on same network |
+| Dashboard won't open | Make sure Terminal 1 (`python app.py`) and Terminal 2 (`npm run dev`) are both running |
+| Commands not working | Restart both `app.py` and `agent.py` |
+| Port already in use | Close all terminals, then re-run |

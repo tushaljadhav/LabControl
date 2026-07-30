@@ -807,6 +807,63 @@ def toggle_schedule_active(schedule_id):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Auto-Discovery: Find PC by MAC Address
+# ──────────────────────────────────────────────────────────────────────────────
+
+def get_pc_by_mac(mac_address):
+    """
+    Find a PC in the database by its MAC address.
+    
+    Used by the Auto-Discovery heartbeat endpoint to check if an agent's PC
+    already exists in the database (so we can update its IP if it changed)
+    or if it's a brand-new PC that needs to be auto-registered.
+    
+    MAC comparison is case-insensitive and ignores separators (: - .)
+    so "C4:75:AB:3D:37:9F" matches "c4-75-ab-3d-37-9f".
+    
+    Parameters:
+        mac_address : The MAC address string to search for
+        
+    Returns:
+        A PC dictionary if found, or None if no PC has this MAC.
+    """
+    if not mac_address:
+        return None
+    
+    # Normalize: remove separators and lowercase for comparison
+    clean_mac = mac_address.replace(":", "").replace("-", "").replace(".", "").strip().lower()
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Get all PCs that have a MAC address set
+    cursor.execute("""
+        SELECT pcs.*, labs.name as lab_name
+        FROM pcs
+        LEFT JOIN labs ON pcs.lab_id = labs.id
+        WHERE pcs.mac_address IS NOT NULL AND pcs.mac_address != ''
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    
+    for row in rows:
+        db_mac = row["mac_address"].replace(":", "").replace("-", "").replace(".", "").strip().lower()
+        if db_mac == clean_mac:
+            return {
+                "id": row["id"],
+                "name": row["name"],
+                "ip": row["ip_address"],
+                "mac_address": row["mac_address"],
+                "status": row["status"],
+                "last_seen": row["last_seen"],
+                "lab_id": row["lab_id"],
+                "lab_name": row["lab_name"],
+            }
+    
+    return None
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Auto-initialize when this module is imported
 # ──────────────────────────────────────────────────────────────────────────────
 initialize_database()

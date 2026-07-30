@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { RefreshCw, AlertOctagon, XCircle, Send, CheckCircle, AlertTriangle, Menu } from 'lucide-react'
+import { RefreshCw, AlertOctagon, XCircle, Send, CheckCircle, AlertTriangle, Menu, Sparkles, Sliders } from 'lucide-react'
 import { useAuth } from './AuthContext'
 import SummaryCards from './SummaryCards'
 import ActionToolbar from './ActionToolbar'
@@ -322,6 +322,8 @@ export default function LabDashboard({ selectedLabId, labs, apiBase, onLabsChang
     return () => clearInterval(t)
   }, [lastRefresh])
 
+  const unassignedPCs = pcs.filter(pc => pc.lab_name === 'Unassigned Lab' || !pc.lab_id)
+
   return (
     <main className="flex-1 overflow-y-auto">
       {/* ── Top bar ──────────────────────────────────────────────── */}
@@ -367,6 +369,35 @@ export default function LabDashboard({ selectedLabId, labs, apiBase, onLabsChang
           </div>
           <button onClick={() => setToastNotification(null)} className="text-slate-400 hover:text-white p-1">
             <XCircle size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* ── Auto-Discovered New PC Notification Banner ──────────────── */}
+      {unassignedPCs.length > 0 && (
+        <div className="bg-indigo-500/15 border-b border-indigo-500/30 px-4 md:px-8 py-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-indigo-500/20 text-indigo-400 shrink-0">
+              <Sparkles size={20} className="animate-pulse" />
+            </div>
+            <div>
+              <div className="font-semibold text-indigo-300 text-sm md:text-base flex items-center gap-2 flex-wrap">
+                <span>🔔 {unassignedPCs.length} New Auto-Discovered PC{unassignedPCs.length > 1 ? 's' : ''} Detected!</span>
+                <span className="px-2 py-0.5 rounded text-xs bg-indigo-500/25 text-indigo-200 font-mono border border-indigo-500/30">
+                  {unassignedPCs[0].name} ({unassignedPCs[0].ip})
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                MAC: <span className="font-mono text-indigo-200">{unassignedPCs[0].mac_address || 'Auto-Detected'}</span> — Click to set custom PC name and assign lab.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setEditingPC(unassignedPCs[0])}
+            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-indigo-600 text-white font-bold text-xs md:text-sm hover:bg-indigo-500 transition-colors shadow-md cursor-pointer min-h-[44px] shrink-0"
+          >
+            <Sliders size={16} /> Configure Name & Lab ✏️
           </button>
         </div>
       )}

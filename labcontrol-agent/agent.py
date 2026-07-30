@@ -40,6 +40,8 @@ import socket      # For TCP server and connections
 import json        # For JSON payload parsing
 import subprocess  # For OS commands & launching popup process
 import time        # For rate-limiting & lockout timestamps
+import struct      # For unpacking binary header lengths (file transfer protocol)
+import uuid        # For auto-detecting MAC address
 import psutil      # For live CPU/RAM/Disk/Uptime metrics
 import threading   # For background file server thread
 
@@ -74,6 +76,96 @@ except Exception as err:
 # Path to the standalone popup alert script
 POPUP_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "popup_alert.py")
 VALID_COMMANDS = ["ping", "shutdown", "restart", "sleep", "cancel", "get_stats", "launch_app", "close_app"]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Auto-Discovery: Server URL & Network Info Detection
+# ──────────────────────────────────────────────────────────────────────────────
+# The agent sends its IP, MAC, and hostname to the server every 30 seconds.
+# Set this in .env: LABCONTROL_SERVER_URL=http://<admin-pc-ip>:8080
+LABCONTROL_SERVER_URL = os.getenv("LABCONTROL_SERVER_URL", "").strip()
+HEARTBEAT_INTERVAL = 30  # Send heartbeat every 30 seconds
+
+
+def get_local_ip():
+    """
+    Auto-detect this PC's LAN IP address.
+    Connects to an external IP (doesn't send data) to determine
+    which local network interface is used for outgoing traffic.
+    """
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(2)
+        s.connect(("8.8.8.8", 80))  # Google DNS — no actual data sent
+        local_ip = s.getsockname()[0]
+        s.close()
+        return local_ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def get_mac_address():
+    """
+    Auto-detect this PC's MAC address using Python's built-in uuid module.
+    Returns formatted MAC string like 'C4:75:AB:3D:37:9F'.
+    """
+    try:
+        mac_int = uuid.getnode()
+        mac_str = ":".join(f"{(mac_int >> (8 * i)) & 0xFF:02X}" for i in reversed(range(6)))
+        return mac_str
+    except Exception:
+        return None
+
+
+def heartbeat_sender():
+    """
+    Background thread that sends auto-discovery heartbeats to the LabControl server.
+    Runs every 30 seconds. If server is unreachable, silently retries next interval.
+    Uses built-in urllib — no pip install needed!
+    """
+    from urllib.request import Request, urlopen
+    from urllib.error import URLError
+
+    heartbeat_url = f"{LABCONTROL_SERVER_URL}/api/agent/heartbeat"
+    hostname = socket.gethostname()
+
+    print(f"  [AUTO-DISCOVERY] Heartbeat sender started → {heartbeat_url}")
+    print(f"  [AUTO-DISCOVERY] This PC: hostname={hostname}")
+
+    while True:
+        try:
+            local_ip = get_local_ip()
+            mac_address = get_mac_address()
+
+            payload = json.dumps({
+                "hostname": hostname,
+                "ip": local_ip,
+                "mac_address": mac_address,
+                "secret_key": SECRET_KEY_STR
+            }).encode("utf-8")
+
+            req = Request(
+                heartbeat_url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+
+            response = urlopen(req, timeout=5)
+            resp_data = json.loads(response.read().decode("utf-8"))
+
+            action = resp_data.get("action", "")
+            if action == "registered":
+                print(f"  [AUTO-DISCOVERY] ✅ Registered as new PC: '{resp_data.get('name')}' (id={resp_data.get('pc_id')})")
+            elif action == "updated" and "updated to" in resp_data.get("message", ""):
+                print(f"  [AUTO-DISCOVERY] 🔄 IP auto-updated on server: {local_ip}")
+            # Silent for normal heartbeats (no spam)
+
+        except URLError:
+            pass  # Server unreachable — silently retry next interval
+        except Exception as e:
+            print(f"  [AUTO-DISCOVERY] Heartbeat error: {e}")
+
+        time.sleep(HEARTBEAT_INTERVAL)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # In-Memory Brute-Force Rate Limiter & IP Lockout Tracker
@@ -468,13 +560,23 @@ def start_agent():
     file_thread = threading.Thread(target=start_file_server, daemon=True)
     file_thread.start()
 
+    # Start Auto-Discovery Heartbeat sender (if server URL is configured)
+    if LABCONTROL_SERVER_URL:
+        heartbeat_thread = threading.Thread(target=heartbeat_sender, daemon=True)
+        heartbeat_thread.start()
+
     print("=" * 65)
-    print("  LabControl Agent (v3.0 - Fernet Encrypted & Hardened)")
+    print("  LabControl Agent (v3.1 - Auto-Discovery + Fernet Encrypted)")
     print("=" * 65)
     print(f"  Command Listener on {HOST}:{PORT}")
     print(f"  File Transfer Listener on {HOST}:{FILE_PORT}")
     print(f"  Encryption: Fernet (AES-128-CBC + HMAC-SHA256)")
     print(f"  Brute-Force Protection: Active (5 fails / 60s -> 5m lockout)")
+    if LABCONTROL_SERVER_URL:
+        print(f"  Auto-Discovery: ON → {LABCONTROL_SERVER_URL} (every {HEARTBEAT_INTERVAL}s)")
+        print(f"  Local IP: {get_local_ip()} | MAC: {get_mac_address()} | Host: {socket.gethostname()}")
+    else:
+        print(f"  Auto-Discovery: OFF (set LABCONTROL_SERVER_URL in .env to enable)")
     print(f"  Waiting for encrypted commands & file deployments...")
     print("  Press Ctrl+C to stop the agent.")
     print("=" * 65)

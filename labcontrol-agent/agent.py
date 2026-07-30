@@ -692,4 +692,13 @@ def start_agent():
 
 
 if __name__ == "__main__":
-    start_agent()
+    while True:
+        try:
+            start_agent()
+            break
+        except KeyboardInterrupt:
+            print("\n[INFO] Agent stopped by user.")
+            break
+        except Exception as e:
+            print(f"[RECOVERY ERROR] Agent crashed or network initializing: {e}. Retrying in 5 seconds...")
+            time.sleep(5)

@@ -75,7 +75,7 @@ except Exception as err:
 
 # Path to the standalone popup alert script
 POPUP_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "popup_alert.py")
-VALID_COMMANDS = ["ping", "shutdown", "restart", "sleep", "cancel", "get_stats", "launch_app", "close_app"]
+VALID_COMMANDS = ["ping", "shutdown", "restart", "sleep", "cancel", "get_stats", "launch_app", "close_app", "get_installed_apps"]
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Auto-Discovery: Server URL & Network Info Detection
@@ -166,6 +166,89 @@ def heartbeat_sender():
             print(f"  [AUTO-DISCOVERY] Heartbeat error: {e}")
 
         time.sleep(HEARTBEAT_INTERVAL)
+
+
+def get_installed_applications():
+    """
+    Scans Windows Registry & common shortcuts to return a list of installed applications.
+    Returns: List of dicts [{"name": "Google Chrome", "cmd": "chrome"}, ...]
+    """
+    apps = []
+    seen = set()
+
+    # Preset common Windows apps
+    preset_apps = [
+        {"name": "Google Chrome", "cmd": "chrome"},
+        {"name": "Microsoft Edge", "cmd": "msedge"},
+        {"name": "Visual Studio Code", "cmd": "code"},
+        {"name": "Notepad", "cmd": "notepad"},
+        {"name": "Calculator", "cmd": "calc"},
+        {"name": "MS Paint", "cmd": "mspaint"},
+        {"name": "MS Word", "cmd": "winword"},
+        {"name": "MS Excel", "cmd": "excel"},
+        {"name": "MS PowerPoint", "cmd": "powerpnt"},
+        {"name": "Command Prompt", "cmd": "cmd"},
+        {"name": "File Explorer", "cmd": "explorer"},
+        {"name": "Task Manager", "cmd": "taskmgr"},
+        {"name": "VLC Media Player", "cmd": "vlc"},
+        {"name": "Snipping Tool", "cmd": "snippingtool"},
+        {"name": "Control Panel", "cmd": "control"},
+    ]
+
+    for p in preset_apps:
+        apps.append(p)
+        seen.add(p["name"].lower())
+
+    if os.name == "nt":
+        try:
+            import winreg
+            registry_paths = [
+                (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+                (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+                (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
+            ]
+
+            for hkey, subkey in registry_paths:
+                try:
+                    key = winreg.OpenKey(hkey, subkey)
+                    for i in range(winreg.QueryInfoKey(key)[0]):
+                        try:
+                            sub_name = winreg.EnumKey(key, i)
+                            sub_key = winreg.OpenKey(key, sub_name)
+                            app_name, _ = winreg.QueryValueEx(sub_key, "DisplayName")
+
+                            if app_name and app_name.strip() and app_name.lower() not in seen:
+                                exe_path = ""
+                                try:
+                                    icon, _ = winreg.QueryValueEx(sub_key, "DisplayIcon")
+                                    if icon and ".exe" in icon.lower():
+                                        exe_path = icon.split(",")[0].strip('"')
+                                except Exception:
+                                    pass
+
+                                if not exe_path:
+                                    try:
+                                        loc, _ = winreg.QueryValueEx(sub_key, "InstallLocation")
+                                        if loc:
+                                            exe_path = loc.strip()
+                                    except Exception:
+                                        pass
+
+                                cmd = exe_path if exe_path else app_name
+                                apps.append({"name": app_name.strip(), "cmd": cmd})
+                                seen.add(app_name.lower())
+                            winreg.CloseKey(sub_key)
+                        except Exception:
+                            continue
+                    winreg.CloseKey(key)
+                except Exception:
+                    continue
+        except Exception as err:
+            print(f"[REGISTRY SCAN ERROR] {err}")
+
+    apps.sort(key=lambda x: x["name"].lower())
+    return apps
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # In-Memory Brute-Force Rate Limiter & IP Lockout Tracker
@@ -426,6 +509,21 @@ def handle_client(client_socket, client_address):
                 return
             except Exception as e:
                 print(f"[CLOSE APP ERROR] Failed to close '{app_name}': {e}")
+                send_encrypted_response(client_socket, {"status": "error", "message": str(e)})
+                return
+
+        elif command == "get_installed_apps":
+            try:
+                apps_list = get_installed_applications()
+                print(f"[INSTALLED APPS] Scanned {len(apps_list)} installed applications")
+                send_encrypted_response(client_socket, {
+                    "status": "success",
+                    "command": "get_installed_apps",
+                    "data": apps_list
+                })
+                return
+            except Exception as e:
+                print(f"[INSTALLED APPS ERROR] {e}")
                 send_encrypted_response(client_socket, {"status": "error", "message": str(e)})
                 return
 

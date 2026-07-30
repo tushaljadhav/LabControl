@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react'
-import { X, Play, Square, Rocket, Globe, FileText, Terminal, Folder, Palette, CheckCircle2, AlertCircle, Laptop } from 'lucide-react'
+import { X, Play, Square, Rocket, Globe, FileText, Terminal, Folder, Palette, CheckCircle2, AlertCircle, Laptop, Search, Cpu, AppWindow } from 'lucide-react'
 
 const LAUNCH_PRESETS = [
   { name: 'Calculator', exe: 'calc.exe', icon: Rocket, bg: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
@@ -37,6 +37,11 @@ export default function RemoteAppsModal({
   const [customPath, setCustomPath] = useState('')
   const [customProcess, setCustomProcess] = useState('')
   const [targetScope, setTargetScope] = useState(selectedCount > 0 ? 'selected' : 'all')
+
+  const [installedApps, setInstalledApps] = useState([])
+  const [scanningApps, setScanningApps] = useState(false)
+  const [appSearch, setAppSearch] = useState('')
+  const [showAppList, setShowAppList] = useState(false)
 
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState(null)
@@ -123,6 +128,40 @@ export default function RemoteAppsModal({
       setLoading(false)
     }
   }
+
+  async function fetchInstalledApps() {
+    setScanningApps(true)
+    setError('')
+    try {
+      const pcIdToScan = targetScope === 'selected' && selectedCount > 0
+        ? Array.from(selectedIds)[0]
+        : null
+
+      const res = await fetch(`${apiBase}/api/installed-apps`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ pc_id: pcIdToScan })
+      })
+
+      const data = await res.json()
+      if (res.ok && data.apps) {
+        setInstalledApps(data.apps)
+        setShowAppList(true)
+      } else {
+        setError('Could not fetch installed applications list')
+      }
+    } catch (err) {
+      setError('Failed to scan installed apps: ' + err.message)
+    } finally {
+      setScanningApps(false)
+    }
+  }
+
+  const filteredApps = installedApps.filter(a =>
+    a.name.toLowerCase().includes(appSearch.toLowerCase()) ||
+    a.cmd.toLowerCase().includes(appSearch.toLowerCase())
+  )
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop">
@@ -219,7 +258,79 @@ export default function RemoteAppsModal({
           {/* TAB 1: LAUNCH APPLICATION */}
           {activeTab === 'launch' && (
             <div className="space-y-4 animate-in">
-              <span className="text-xs font-semibold uppercase text-slate-400 tracking-wider">Quick Presets</span>
+              
+              {/* Scan Installed Apps Button Banner */}
+              <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <AppWindow size={18} className="text-purple-400" />
+                  <div>
+                    <div className="text-xs font-bold text-purple-300">Don't know app name? Auto-Detect Software!</div>
+                    <div className="text-[10px] text-slate-400">Scans all installed applications on the target PC</div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={fetchInstalledApps}
+                  disabled={scanningApps}
+                  className="btn-action bg-purple-600 text-white hover:bg-purple-500 text-xs px-3 py-1.5 shrink-0 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Search size={14} />
+                  {scanningApps ? 'Scanning...' : 'Scan Installed Apps 🔍'}
+                </button>
+              </div>
+
+              {/* Installed Apps Search & List Dropdown */}
+              {showAppList && (
+                <div className="p-3 bg-card border border-purple-500/30 rounded-xl space-y-2 animate-in">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                      <Cpu size={14} /> {installedApps.length} Installed Software Found:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAppList(false)}
+                      className="text-[10px] text-slate-400 hover:text-white"
+                    >
+                      Hide List
+                    </button>
+                  </div>
+
+                  <input
+                    type="text"
+                    value={appSearch}
+                    onChange={e => setAppSearch(e.target.value)}
+                    placeholder="Search software (e.g. Photoshop, VS Code, Chrome)..."
+                    className="input-field text-xs mb-2"
+                  />
+
+                  <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1">
+                    {filteredApps.length === 0 ? (
+                      <div className="text-xs text-slate-400 py-2 text-center">No matching app found.</div>
+                    ) : (
+                      filteredApps.map((a, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => { setCustomPath(a.cmd); handleLaunchApp(a.cmd) }}
+                          className="p-2 rounded-lg bg-surface border border-elevated hover:border-purple-500/50 hover:bg-purple-500/10 flex items-center justify-between cursor-pointer transition-all text-xs"
+                        >
+                          <span className="font-semibold text-slate-200">{a.name}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[10px] text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
+                              {a.cmd}
+                            </span>
+                            <span className="text-[10px] bg-brand text-white px-2 py-0.5 rounded font-bold">
+                              Launch 🚀
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <span className="text-xs font-semibold uppercase text-slate-400 tracking-wider block">Quick Presets</span>
 
               {/* Presets Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">

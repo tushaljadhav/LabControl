@@ -711,6 +711,29 @@ def api_close_app():
     return jsonify({"results": results})
 
 
+@app.route("/api/installed-apps", methods=["POST"])
+@login_required
+def api_get_installed_apps():
+    """Fetch list of installed applications from target PC agent."""
+    data = request.get_json() or {}
+    pc_id = data.get("pc_id")
+
+    all_pcs = get_all_pcs()
+    if pc_id is not None:
+        target_pcs = [pc for pc in all_pcs if pc["id"] == pc_id]
+    else:
+        target_pcs = [pc for pc in all_pcs if pc["status"] != "offline"]
+
+    if not target_pcs:
+        return jsonify({"apps": []})
+
+    results = send_to_pcs([target_pcs[0]], "get_installed_apps")
+    if results and results[0].get("status") == "success" and "data" in results[0]:
+        return jsonify({"apps": results[0]["data"]})
+
+    return jsonify({"apps": []})
+
+
 @app.route("/api/deploy-file", methods=["POST"])
 @login_required
 def api_deploy_file():

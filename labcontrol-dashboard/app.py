@@ -144,13 +144,13 @@ def api_agent_heartbeat():
         return jsonify({"error": "No JSON data received"}), 400
 
     # ── Validate secret key (agent authentication) ────────────────────────
-    agent_key = data.get("secret_key", "").strip()
+    agent_key = (data.get("secret_key") or "").strip()
     if not agent_key or agent_key != SECRET_KEY_STR:
         return jsonify({"error": "Invalid or missing secret key"}), 403
 
-    hostname = data.get("hostname", "").strip()
-    ip = data.get("ip", "").strip()
-    mac_address = data.get("mac_address", "").strip()
+    hostname = (data.get("hostname") or "").strip()
+    ip = (data.get("ip") or "").strip()
+    mac_address = (data.get("mac_address") or "").strip()
 
     if not ip or not mac_address:
         return jsonify({"error": "ip and mac_address are required"}), 400
@@ -438,9 +438,9 @@ def api_add_pc():
     if not data:
         return jsonify({"error": "No JSON data received"}), 400
 
-    name = data.get("name", "").strip()
-    ip = data.get("ip", "").strip()
-    mac = data.get("mac_address", "").strip()
+    name = (data.get("name") or "").strip()
+    ip = (data.get("ip") or "").strip()
+    mac = (data.get("mac_address") or "").strip()
     lab_id = data.get("lab_id")
 
     if not name or not ip:

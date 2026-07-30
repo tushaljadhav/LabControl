@@ -638,7 +638,6 @@ def start_file_server():
     try:
         file_socket.bind((HOST, FILE_PORT))
         file_socket.listen(10)
-        print(f"  File Transfer Listener on {HOST}:{FILE_PORT}")
 
         while True:
             client_socket, client_address = file_socket.accept()

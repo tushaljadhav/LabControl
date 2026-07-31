@@ -97,7 +97,7 @@ export default function Sidebar({
             {/* Theme Toggle Button */}
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-lg bg-elevated hover:bg-hover text-slate-300 hover:text-white transition-colors cursor-pointer"
+              className="p-2 rounded-lg bg-elevated hover:bg-hover transition-colors cursor-pointer"
               title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
               {theme === 'dark' ? (
@@ -110,7 +110,7 @@ export default function Sidebar({
             {/* Mobile Drawer Close Button */}
             <button
               onClick={onCloseMobile}
-              className="p-2 rounded-lg bg-elevated hover:bg-hover text-slate-400 hover:text-white transition-colors md:hidden"
+              className="p-2 rounded-lg bg-elevated hover:bg-hover transition-colors md:hidden"
               title="Close menu"
             >
               <X size={18} />
@@ -155,7 +155,7 @@ export default function Sidebar({
               <div className="hidden group-hover:flex items-center gap-1 shrink-0">
                 <button
                   onClick={e => handleEditLab(lab, e)}
-                  className="p-1 hover:text-white hover:bg-elevated rounded transition-colors"
+                  className="p-1 hover:bg-elevated rounded transition-colors"
                   title="Edit Lab"
                 >
                   <Edit2 size={13} />
@@ -188,7 +188,7 @@ export default function Sidebar({
                 <div className="p-1.5 rounded-full bg-elevated text-slate-300">
                   <UserIcon size={14} />
                 </div>
-                <span className="font-semibold text-slate-200 truncate">{user.username}</span>
+                <span className="font-semibold truncate">{user.username}</span>
                 {user.two_factor_enabled && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">2FA</span>
                 )}

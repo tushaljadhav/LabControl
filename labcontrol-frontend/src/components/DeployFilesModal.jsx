@@ -1,19 +1,28 @@
 /**
- * DeployFilesModal.jsx — Modal for Deploying Files or Folders to Target PCs
- *
- * Supports single/multiple files or entire folder directories (webkitdirectory),
- * target location selection (Desktop, Downloads, Documents, Custom), and live per-PC deployment status.
+ * DeployFilesModal.jsx — Remote File & Folder Deployment Modal with Real-Time Progress Tracking
  */
 
-import { useState, useRef } from 'react'
-import { X, Upload, FolderUp, File, Folder, CheckCircle2, AlertCircle, Laptop, HardDrive, Package, ArrowRight } from 'lucide-react'
+import { useState, useRef, useMemo } from 'react'
+import {
+  Package,
+  X,
+  Upload,
+  FolderUp,
+  File,
+  HardDrive,
+  Laptop,
+  CheckCircle,
+  AlertCircle,
+  RefreshCw,
+  Sparkles
+} from 'lucide-react'
 
 export default function DeployFilesModal({
   isOpen,
   onClose,
   selectedCount,
   selectedIds,
-  pcs = [],
+  pcs,
   apiBase,
   onActionComplete
 }) {
@@ -23,11 +32,23 @@ export default function DeployFilesModal({
   const [targetScope, setTargetScope] = useState(selectedCount > 0 ? 'selected' : 'all')
 
   const [loading, setLoading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(null) // { percent, loadedMB, totalMB, phase }
   const [results, setResults] = useState(null)
   const [error, setError] = useState('')
 
   const fileInputRef = useRef(null)
   const folderInputRef = useRef(null)
+
+  const formattedSize = useMemo(() => {
+    if (!selectedFiles.length) return '0 KB'
+    let sum = 0
+    for (let i = 0; i < selectedFiles.length; i++) {
+      sum += selectedFiles[i].size || 0
+    }
+    return sum > 1024 * 1024
+      ? `${(sum / (1024 * 1024)).toFixed(1)} MB`
+      : `${(sum / 1024).toFixed(1)} KB`
+  }, [selectedFiles])
 
   if (!isOpen) return null
 
@@ -39,20 +60,16 @@ export default function DeployFilesModal({
     ? `${selectedCount} Selected PC(s)`
     : `All ${pcs.length} PC(s)`
 
-  const totalBytes = selectedFiles.reduce((acc, f) => acc + (f.size || 0), 0)
-  const formattedSize = totalBytes > 1024 * 1024
-    ? `${(totalBytes / (1024 * 1024)).toFixed(1)} MB`
-    : `${(totalBytes / 1024).toFixed(1)} KB`
-
   function handleFileChange(e) {
     if (e.target.files && e.target.files.length > 0) {
       setSelectedFiles(Array.from(e.target.files))
       setError('')
       setResults(null)
+      setUploadProgress(null)
     }
   }
 
-  async function handleDeploy() {
+  function handleDeploy() {
     if (selectedFiles.length === 0) {
       setError('Please select at least one file or folder to deploy')
       return
@@ -64,9 +81,11 @@ export default function DeployFilesModal({
       return
     }
 
+    const totalSize = selectedFiles.reduce((acc, f) => acc + (f.size || 0), 0)
     setError('')
     setLoading(true)
     setResults(null)
+    setUploadProgress({ percent: 0, loadedMB: '0.0', totalMB: (totalSize / (1024 * 1024)).toFixed(1), phase: 'Uploading payload to server...' })
 
     try {
       const formData = new FormData()
@@ -74,91 +93,115 @@ export default function DeployFilesModal({
       formData.append('dest_dir', finalDestDir)
 
       selectedFiles.forEach(file => {
-        // preserve webkitRelativePath for directory structures if present
         const filename = file.webkitRelativePath || file.name
         formData.append('files', file, filename)
       })
 
-      const res = await fetch(`${apiBase}/api/deploy-file`, {
-        method: 'POST',
-        credentials: 'include',
-        body: formData
-      })
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${apiBase}/api/deploy-file`, true)
+      xhr.withCredentials = true
 
-      const data = await res.json()
-      if (res.ok) {
-        setResults(data.results || [])
-        if (onActionComplete) onActionComplete()
-      } else {
-        setError(data.error || 'Failed to deploy files')
+      // Track real-time upload progress percentage & MBs
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 100)
+          const loadedMB = (event.loaded / (1024 * 1024)).toFixed(1)
+          const totalMB = (event.total / (1024 * 1024)).toFixed(1)
+          const phase = percent < 100 ? 'Uploading payload to server...' : 'Transferring payload over LAN to target PCs...'
+          setUploadProgress({ percent, loadedMB, totalMB, phase })
+        }
       }
+
+      xhr.onload = () => {
+        setLoading(false)
+        setUploadProgress(null)
+
+        try {
+          const data = JSON.parse(xhr.responseText)
+          if (xhr.status >= 200 && xhr.status < 300) {
+            setResults(data.results || [])
+            if (onActionComplete) onActionComplete()
+          } else {
+            setError(data.error || `Deployment error (Status ${xhr.status})`)
+          }
+        } catch (err) {
+          if (xhr.status === 413) {
+            setError('Payload too large for a single upload request')
+          } else {
+            setError(`Deployment Error (HTTP ${xhr.status}): ${xhr.statusText || 'Unexpected server response'}`)
+          }
+        }
+      }
+
+      xhr.onerror = () => {
+        setLoading(false)
+        setUploadProgress(null)
+        setError('Network error during deployment transfer')
+      }
+
+      xhr.send(formData)
     } catch (err) {
-      setError('Network error: ' + err.message)
-    } finally {
       setLoading(false)
+      setUploadProgress(null)
+      setError('Error initiating deployment: ' + err.message)
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop">
-      <div className="bg-surface border border-elevated rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden animate-in flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in">
+      <div className="bg-card border border-card rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
         {/* Header */}
-        <div className="p-5 border-b border-card flex items-center justify-between bg-card/40">
+        <div className="p-4 md:p-5 border-b border-card flex items-center justify-between bg-surface/50">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/20">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center">
               <Package size={22} />
             </div>
             <div>
-              <h3 className="font-bold text-lg text-white">Deploy Files & Folders</h3>
-              <p className="text-xs text-slate-400">Push files or entire directory folders to target lab PCs</p>
+              <h3 className="font-bold text-lg text-main">Deploy Files & Folders</h3>
+              <p className="text-xs text-sub">Push files or entire directory folders to target lab PCs</p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-elevated transition-colors"
+            className="p-2 rounded-lg text-sub hover:text-brand hover:bg-elevated transition-colors cursor-pointer"
           >
             <X size={18} />
           </button>
         </div>
 
-        {/* Body */}
-        <div className="p-5 overflow-y-auto space-y-4 flex-1">
-          {error && (
-            <div className="p-3 rounded-xl bg-offline/10 border border-offline/20 text-offline text-xs flex items-center gap-2">
-              <AlertCircle size={16} />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Target Scope Selection */}
-          <div className="p-3 bg-card border border-elevated rounded-xl flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
+        {/* Content Body */}
+        <div className="p-4 md:p-6 overflow-y-auto space-y-4">
+          
+          {/* Target PCs Selector */}
+          <div className="p-3 bg-surface border border-elevated rounded-xl flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-semibold text-sub">
               <Laptop size={16} className="text-brand" />
-              Target PCs: <span className="text-white font-mono">{targetCountDisplay}</span>
+              Target PCs: <span className="text-brand font-mono font-bold">{targetCountDisplay}</span>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-surface p-1 rounded-lg border border-elevated">
+            <div className="flex items-center gap-1 bg-elevated p-1 rounded-lg border border-elevated">
               <button
                 type="button"
                 onClick={() => setTargetScope('selected')}
                 disabled={selectedCount === 0}
-                className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+                className={`px-2.5 py-1 rounded text-xs font-bold transition-colors ${
                   targetScope === 'selected' && selectedCount > 0
                     ? 'bg-brand text-white'
-                    : 'text-slate-400 hover:text-slate-200 disabled:opacity-30'
+                    : 'text-sub hover:text-main disabled:opacity-30'
                 }`}
               >
                 Selected ({selectedCount})
               </button>
+
               <button
                 type="button"
                 onClick={() => setTargetScope('all')}
-                className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
-                  targetScope === 'all'
+                className={`px-2.5 py-1 rounded text-xs font-bold transition-colors ${
+                  targetScope === 'all' || selectedCount === 0
                     ? 'bg-brand text-white'
-                    : 'text-slate-400 hover:text-slate-200'
+                    : 'text-sub hover:text-main'
                 }`}
               >
                 All PCs ({pcs.length})
@@ -166,27 +209,36 @@ export default function DeployFilesModal({
             </div>
           </div>
 
-          {/* File / Folder Select Box */}
-          <div className="p-5 border-2 border-dashed border-elevated hover:border-brand/50 rounded-2xl bg-card/30 text-center space-y-3 transition-colors">
-            <div className="flex justify-center gap-3">
+          {/* File / Folder Dropzone area */}
+          <div className="border-2 border-dashed border-card hover:border-brand/50 rounded-2xl p-5 md:p-6 text-center space-y-3 bg-surface/30 transition-colors">
+            <div className="w-12 h-12 mx-auto rounded-xl bg-brand/10 text-brand flex items-center justify-center">
+              <Upload size={24} />
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold text-main">Choose items to deploy</p>
+              <p className="text-xs text-sub mt-0.5">Select individual files or full directory folders</p>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 pt-1">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="px-4 py-2 rounded-xl bg-brand/15 border border-brand/30 text-brand font-semibold text-xs flex items-center gap-2 hover:bg-brand/25 transition-colors cursor-pointer"
+                className="btn-primary py-2 px-3.5 text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5"
               >
-                <File size={16} /> Select Files
+                <File size={15} /> Select File(s)
               </button>
 
               <button
                 type="button"
                 onClick={() => folderInputRef.current?.click()}
-                className="px-4 py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 font-semibold text-xs flex items-center gap-2 hover:bg-amber-500/25 transition-colors cursor-pointer"
+                className="btn-action bg-amber-500/15 border-amber-500/30 text-amber-500 hover:bg-amber-500/25 py-2 px-3.5 text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5"
               >
-                <FolderUp size={16} /> Select Folder
+                <FolderUp size={15} /> Select Folder
               </button>
             </div>
 
-            {/* Hidden Inputs */}
+            {/* Hidden File Inputs */}
             <input
               ref={fileInputRef}
               type="file"
@@ -203,29 +255,25 @@ export default function DeployFilesModal({
               onChange={handleFileChange}
               className="hidden"
             />
-
-            <p className="text-[11px] text-slate-500">
-              Or drag & drop files here. Supports single files, multiple files, or entire folders.
-            </p>
           </div>
 
-          {/* Selected Files Summary List */}
+          {/* Selected Payload Summary */}
           {selectedFiles.length > 0 && (
-            <div className="p-3 bg-card border border-elevated rounded-xl space-y-2">
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
-                <span>Selected Payload:</span>
-                <span className="font-mono text-brand">{selectedFiles.length} item(s) ({formattedSize})</span>
+            <div className="p-3.5 bg-surface border border-elevated rounded-xl space-y-2">
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span className="text-sub">Selected Payload:</span>
+                <span className="font-mono text-brand font-bold">{selectedFiles.length} item(s) ({formattedSize})</span>
               </div>
 
-              <div className="max-h-28 overflow-y-auto space-y-1 text-[11px] font-mono text-slate-400">
+              <div className="max-h-28 overflow-y-auto space-y-1 text-xs font-mono text-sub">
                 {selectedFiles.slice(0, 10).map((file, idx) => (
                   <div key={idx} className="flex items-center gap-2 truncate">
-                    <File size={12} className="text-slate-500 shrink-0" />
+                    <File size={13} className="text-brand shrink-0" />
                     <span className="truncate">{file.webkitRelativePath || file.name}</span>
                   </div>
                 ))}
                 {selectedFiles.length > 10 && (
-                  <div className="text-[10px] text-slate-500 italic">
+                  <div className="text-[11px] text-sub italic">
                     ...and {selectedFiles.length - 10} more files
                   </div>
                 )}
@@ -233,9 +281,9 @@ export default function DeployFilesModal({
             </div>
           )}
 
-          {/* Target Destination Directory Selector */}
+          {/* Destination Directory Option */}
           <div className="space-y-2">
-            <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+            <label className="block text-xs font-bold text-sub flex items-center gap-1.5">
               <HardDrive size={14} className="text-brand" /> Target PC Folder Location
             </label>
 
@@ -245,10 +293,10 @@ export default function DeployFilesModal({
                   key={loc}
                   type="button"
                   onClick={() => setDestDir(loc)}
-                  className={`p-2.5 rounded-xl border text-xs font-semibold transition-colors text-center ${
+                  className={`p-2.5 rounded-xl border text-xs font-bold transition-colors text-center cursor-pointer ${
                     destDir === loc
                       ? 'bg-brand text-white border-brand'
-                      : 'bg-card border-elevated text-slate-400 hover:text-slate-200'
+                      : 'bg-surface border-elevated text-sub hover:text-main'
                   }`}
                 >
                   {loc === 'custom' ? 'Custom Path' : loc}
@@ -267,15 +315,53 @@ export default function DeployFilesModal({
             )}
           </div>
 
-          {/* Execution Results Feed */}
+          {/* REAL-TIME UPLOAD PROGRESS BAR */}
+          {loading && uploadProgress && (
+            <div className="p-4 bg-surface border border-brand/30 rounded-xl space-y-2.5 animate-in">
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span className="flex items-center gap-2 text-brand font-bold">
+                  <RefreshCw size={14} className="animate-spin text-brand" />
+                  {uploadProgress.phase}
+                </span>
+                <span className="font-mono text-brand font-bold text-sm">
+                  {uploadProgress.percent}%
+                </span>
+              </div>
+
+              {/* Animated Progress Bar */}
+              <div className="h-3 bg-elevated rounded-full overflow-hidden p-0.5 border border-card shadow-inner">
+                <div
+                  className="h-full bg-gradient-to-r from-brand to-indigo-500 rounded-full transition-all duration-300 shadow-md"
+                  style={{ width: `${uploadProgress.percent}%` }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] font-mono text-sub">
+                <span>Transferred: <strong>{uploadProgress.loadedMB} MB</strong> of <strong>{uploadProgress.totalMB} MB</strong></span>
+                <span>Speed: High-Speed LAN</span>
+              </div>
+            </div>
+          )}
+
+          {/* Error Notice */}
+          {error && (
+            <div className="p-3 bg-red-500/10 border border-red-500/25 rounded-xl flex items-center gap-2 text-red-500 text-xs font-semibold animate-in">
+              <AlertCircle size={16} className="shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* Results Feed Table */}
           {results && results.length > 0 && (
-            <div className="mt-4 p-3 bg-card border border-elevated rounded-xl space-y-2 animate-in">
-              <span className="text-xs font-bold text-slate-300">Deployment Results:</span>
-              <div className="space-y-1 max-h-36 overflow-y-auto font-mono text-xs">
+            <div className="mt-4 p-3 bg-surface border border-elevated rounded-xl space-y-2 animate-in">
+              <span className="text-xs font-bold text-main flex items-center gap-1.5">
+                <Sparkles size={14} className="text-brand" /> Deployment Results:
+              </span>
+              <div className="space-y-1.5 max-h-36 overflow-y-auto font-mono text-xs">
                 {results.map((r, idx) => (
-                  <div key={idx} className="flex items-center justify-between py-1 border-b border-card/40 last:border-0">
-                    <span className="text-slate-300">{r.name} ({r.ip}):</span>
-                    <span className={r.status === 'success' ? 'text-emerald-400 font-semibold' : 'text-offline font-semibold'}>
+                  <div key={idx} className="flex items-center justify-between py-1.5 border-b border-card/40 last:border-0">
+                    <span className="text-sub font-semibold">{r.name} ({r.ip}):</span>
+                    <span className={r.status === 'success' ? 'text-online font-bold' : 'text-offline font-bold'}>
                       {r.message || r.detail || r.status}
                     </span>
                   </div>
@@ -285,30 +371,34 @@ export default function DeployFilesModal({
           )}
         </div>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-card bg-card/30 flex items-center justify-between">
-          <span className="text-xs text-slate-400">
-            Port 5556 TCP Chunked Stream
-          </span>
-          <div className="flex gap-2">
-            <button onClick={onClose} className="btn-secondary text-xs px-4">
-              Close
-            </button>
-            <button
-              onClick={handleDeploy}
-              disabled={loading || selectedFiles.length === 0}
-              className="btn-primary text-xs px-5 flex items-center gap-1.5 shadow-md disabled:opacity-40"
-            >
-              {loading ? (
-                <>Deploying...</>
-              ) : (
-                <>
-                  <Upload size={14} /> Deploy to PCs <ArrowRight size={14} />
-                </>
-              )}
-            </button>
-          </div>
+        {/* Modal Footer */}
+        <div className="p-4 border-t border-card bg-surface flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-secondary px-4 py-2 text-xs font-bold rounded-xl cursor-pointer"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDeploy}
+            disabled={loading || selectedFiles.length === 0}
+            className="btn-primary px-5 py-2 text-xs font-bold rounded-xl shadow-md cursor-pointer disabled:opacity-40 flex items-center gap-2"
+          >
+            {loading ? (
+              <>
+                <RefreshCw size={14} className="animate-spin" /> Deploying ({uploadProgress?.percent || 0}%)...
+              </>
+            ) : (
+              <>
+                <Upload size={14} /> Deploy Payload
+              </>
+            )}
+          </button>
         </div>
+
       </div>
     </div>
   )

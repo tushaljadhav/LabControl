@@ -176,9 +176,11 @@ def check_all_pcs_health(pc_list):
     return results
 
 
-def send_wol_packet(mac_address):
+def send_wol_packet(mac_address, target_ip=None):
     """
-    Send a Wake-on-LAN (WOL) Magic Packet to a target MAC address via UDP broadcast on Port 9.
+    Send a Wake-on-LAN (WOL) Magic Packet to a target MAC address.
+    Sends multi-broadcast packets over ports 7 and 9, and to both global broadcast (255.255.255.255)
+    and local subnet broadcast (e.g. 192.168.1.255) for maximum Wi-Fi & LAN wake-up reliability.
     """
     if not mac_address or not str(mac_address).strip():
         return {"status": "error", "detail": "MAC address not set for this PC"}
@@ -192,11 +194,27 @@ def send_wol_packet(mac_address):
         mac_bytes = bytes.fromhex(clean_mac)
         magic_packet = b'\xff' * 6 + mac_bytes * 16
 
+        # Determine target subnet broadcast (e.g., 192.168.1.255 if IP is 192.168.1.121)
+        broadcast_targets = ["255.255.255.255", "<broadcast>"]
+        if target_ip and "." in str(target_ip):
+            parts = str(target_ip).split(".")
+            if len(parts) == 4:
+                subnet_broadcast = f"{parts[0]}.{parts[1]}.{parts[2]}.255"
+                broadcast_targets.append(subnet_broadcast)
+
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            sock.sendto(magic_packet, ('<broadcast>', 9))
+            # Send across all broadcast targets and ports (7 & 9) multiple times
+            for bcast in broadcast_targets:
+                for port in (9, 7):
+                    for _ in range(3):
+                        try:
+                            sock.sendto(magic_packet, (bcast, port))
+                        except Exception:
+                            pass
 
         return {"status": "success", "detail": f"Magic Packet sent to {mac_address}"}
 
     except Exception as e:
         return {"status": "error", "detail": f"Failed to send WOL packet: {str(e)}"}
+

@@ -144,14 +144,14 @@ export default function SchedulesModal({ isOpen, onClose, labs, apiBase }) {
               <Clock size={22} />
             </div>
             <div>
-              <h3 className="font-bold text-lg text-white">Scheduled Actions & Timers</h3>
+              <h3 className="font-bold text-lg">Scheduled Actions & Timers</h3>
               <p className="text-xs text-slate-400">Automate daily shutdown, restart, or sleep times per lab</p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-elevated transition-colors"
+            className="p-2 rounded-lg text-muted hover:text-brand hover:bg-elevated transition-colors"
           >
             <X size={18} />
           </button>
@@ -191,7 +191,7 @@ export default function SchedulesModal({ isOpen, onClose, labs, apiBase }) {
           {/* Add Schedule Form */}
           {showAddForm && (
             <form onSubmit={handleAddSchedule} className="p-4 bg-card border border-elevated rounded-xl space-y-4 animate-in">
-              <h4 className="text-sm font-bold text-slate-200 border-b border-elevated pb-2">Create New Schedule</h4>
+              <h4 className="text-sm font-bold border-b border-elevated pb-2">Create New Schedule</h4>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* Target Lab */}

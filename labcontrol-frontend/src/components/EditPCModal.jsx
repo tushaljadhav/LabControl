@@ -69,7 +69,7 @@ export default function EditPCModal({ isOpen, onClose, pc, labs, onPCSaved, apiB
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-lg font-semibold">Edit PC Details</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+          <button onClick={onClose} className="text-muted hover:text-brand transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -77,7 +77,7 @@ export default function EditPCModal({ isOpen, onClose, pc, labs, onPCSaved, apiB
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">PC Name *</label>
+            <label className="block text-sm font-medium text-sub mb-1">PC Name *</label>
             <input
               type="text"
               value={name}
@@ -89,7 +89,7 @@ export default function EditPCModal({ isOpen, onClose, pc, labs, onPCSaved, apiB
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">IP Address *</label>
+            <label className="block text-sm font-medium text-sub mb-1">IP Address *</label>
             <input
               type="text"
               value={ip}
@@ -100,7 +100,7 @@ export default function EditPCModal({ isOpen, onClose, pc, labs, onPCSaved, apiB
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">MAC Address (optional for WOL)</label>
+            <label className="block text-sm font-medium text-sub mb-1">MAC Address (optional for WOL)</label>
             <input
               type="text"
               value={macAddress}
@@ -111,7 +111,7 @@ export default function EditPCModal({ isOpen, onClose, pc, labs, onPCSaved, apiB
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Assign to Lab</label>
+            <label className="block text-sm font-medium text-sub mb-1">Assign to Lab</label>
             <select
               value={labId}
               onChange={e => setLabId(e.target.value)}

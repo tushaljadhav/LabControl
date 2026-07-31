@@ -112,6 +112,18 @@ export default function LabDashboard({ selectedLabId, labs, apiBase, onLabsChang
     }
   }, [apiBase, selectedLabId, authFetch])
 
+  const handleClearLogs = useCallback(async () => {
+    if (!window.confirm('Are you sure you want to delete all activity logs?')) return
+    try {
+      const res = await authFetch(`${apiBase}/api/logs`, { method: 'DELETE' })
+      if (res.ok) {
+        fetchLogs()
+      }
+    } catch (err) {
+      console.error('Failed to clear logs:', err)
+    }
+  }, [apiBase, authFetch, fetchLogs])
+
   // ── Auto-refresh ────────────────────────────────────────────────────
   useEffect(() => {
     fetchPCs()
@@ -331,7 +343,7 @@ export default function LabDashboard({ selectedLabId, labs, apiBase, onLabsChang
         <div className="flex items-center gap-3">
           <button
             onClick={onOpenMobileMenu}
-            className="p-2 rounded-lg bg-elevated hover:bg-hover text-slate-300 md:hidden min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+            className="p-2 rounded-lg bg-elevated hover:bg-hover md:hidden min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
             title="Open menu"
           >
             <Menu size={20} />
@@ -367,7 +379,7 @@ export default function LabDashboard({ selectedLabId, labs, apiBase, onLabsChang
               <span className="text-xs">{toastNotification.message}</span>
             </div>
           </div>
-          <button onClick={() => setToastNotification(null)} className="text-slate-400 hover:text-white p-1">
+          <button onClick={() => setToastNotification(null)} className="text-muted hover:text-brand p-1">
             <XCircle size={16} />
           </button>
         </div>
@@ -456,7 +468,7 @@ export default function LabDashboard({ selectedLabId, labs, apiBase, onLabsChang
           onOpenStats={pc => setSelectedStatsPC(pc)}
         />
 
-        <ActivityLog logs={logs} onRefresh={fetchLogs} />
+        <ActivityLog logs={logs} onRefresh={fetchLogs} onClearLogs={handleClearLogs} />
       </div>
 
       {/* Add PC Modal */}

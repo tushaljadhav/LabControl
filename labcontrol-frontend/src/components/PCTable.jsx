@@ -81,7 +81,7 @@ export default function PCTable({
                     {/* View Live Stats Modal Button */}
                     <button
                       onClick={() => onOpenStats(pc)}
-                      className="p-1.5 hover:text-brand hover:bg-brand/10 rounded-lg transition-colors text-slate-400"
+                      className="p-1.5 hover:text-brand hover:bg-brand/10 rounded-lg transition-colors text-sub cursor-pointer"
                       title="View Live CPU / RAM / Disk Stats"
                     >
                       <Activity size={15} />
@@ -90,7 +90,7 @@ export default function PCTable({
                     {/* Edit PC Button */}
                     <button
                       onClick={() => onEditPC(pc)}
-                      className="p-1.5 hover:text-white hover:bg-elevated rounded-lg transition-colors text-slate-400"
+                      className="p-1.5 hover:text-brand hover:bg-elevated rounded-lg transition-colors text-sub cursor-pointer"
                       title="Edit PC"
                     >
                       <Edit2 size={15} />
@@ -99,7 +99,7 @@ export default function PCTable({
                     {/* Delete PC Button */}
                     <button
                       onClick={() => onDeletePC(pc)}
-                      className="p-1.5 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors text-slate-400"
+                      className="p-1.5 hover:text-red-400 hover:bg-red-500/15 rounded-lg transition-colors text-sub cursor-pointer"
                       title="Delete PC"
                     >
                       <Trash2 size={15} />

@@ -44,9 +44,10 @@ def send_file_to_pc(pc, file_bytes, relative_filename, filesize, dest_dir="Deskt
         result["status"] = "error"
         result["detail"] = "Server Fernet key misconfigured"
         return result
-
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 262144)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 262144)
         s.settimeout(TRANSFER_TIMEOUT)
         s.connect((pc["ip"], FILE_PORT))
 
@@ -65,14 +66,30 @@ def send_file_to_pc(pc, file_bytes, relative_filename, filesize, dest_dir="Deskt
         s.sendall(encrypted_header)
 
         # ── 2. Stream Binary Data Chunks ──────────────────────────────────────
-        chunk_size = 65536
-        offset = 0
-        while offset < filesize:
-            chunk = file_bytes[offset:offset + chunk_size]
-            if not chunk:
-                break
-            s.sendall(chunk)
-            offset += len(chunk)
+        chunk_size = 262144
+        if isinstance(file_bytes, bytes):
+            offset = 0
+            while offset < filesize:
+                chunk = file_bytes[offset:offset + chunk_size]
+                if not chunk:
+                    break
+                s.sendall(chunk)
+                offset += len(chunk)
+        elif isinstance(file_bytes, str) and os.path.isfile(file_bytes):
+            with open(file_bytes, "rb") as f:
+                while True:
+                    chunk = f.read(chunk_size)
+                    if not chunk:
+                        break
+                    s.sendall(chunk)
+        elif hasattr(file_bytes, "read"):
+            if hasattr(file_bytes, "seek"):
+                file_bytes.seek(0)
+            while True:
+                chunk = file_bytes.read(chunk_size)
+                if not chunk:
+                    break
+                s.sendall(chunk)
 
         # ── 3. Read Agent Response ───────────────────────────────────────────
         raw_response = s.recv(4096)

@@ -481,12 +481,21 @@ def handle_client(client_socket, client_address):
                 # We use taskkill WITHOUT /F (force) so Windows sends WM_CLOSE to the window.
                 # If a user has unsaved files, Notepad/App will display standard "Save Changes" prompt!
                 if os.name == "nt":
+                    force_flag = " /F" if message.get("force") else ""
                     res = subprocess.run(
-                        f'taskkill /IM "{target_exe}"',
+                        f'taskkill{force_flag} /IM "{target_exe}"',
                         shell=True,
                         capture_output=True,
                         text=True
                     )
+                    # Fallback to force kill if graceful close returns exit code != 0
+                    if res.returncode != 0 and not force_flag:
+                        res = subprocess.run(
+                            f'taskkill /F /IM "{target_exe}"',
+                            shell=True,
+                            capture_output=True,
+                            text=True
+                        )
                     output_msg = res.stdout.strip() or res.stderr.strip() or f"Sent close signal to '{target_exe}'"
                 else:
                     closed_count = 0
@@ -550,7 +559,9 @@ def handle_file_transfer_client(client_socket, client_address):
         return
 
     try:
-        client_socket.settimeout(30.0)
+        client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 262144)
+        client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 262144)
+        client_socket.settimeout(60.0)
 
         # ── 1. Read 4-byte header length ──────────────────────────────────────
         header_len_bytes = client_socket.recv(4)
@@ -602,7 +613,7 @@ def handle_file_transfer_client(client_socket, client_address):
         with open(target_file_path, "wb") as f:
             while bytes_received < filesize:
                 remaining = filesize - bytes_received
-                chunk = client_socket.recv(min(65536, remaining))
+                chunk = client_socket.recv(min(262144, remaining))
                 if not chunk:
                     break
                 f.write(chunk)

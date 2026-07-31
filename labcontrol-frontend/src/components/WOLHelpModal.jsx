@@ -17,11 +17,11 @@ export default function WOLHelpModal({ isOpen, onClose }) {
               <Zap size={22} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">Wake-on-LAN (WOL) Guide</h3>
-              <p className="text-xs text-slate-400">How to wake powered-off PCs remotely</p>
+              <h3 className="text-lg font-bold">Wake-on-LAN (WOL) Guide</h3>
+              <p className="text-xs text-sub">How to configure PCs to accept Remote Wake-up signals</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+          <button onClick={onClose} className="text-sub hover:text-brand transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -44,7 +44,7 @@ export default function WOLHelpModal({ isOpen, onClose }) {
               <Cpu size={18} />
             </div>
             <div>
-              <h4 className="font-semibold text-slate-200">1. Enable WOL in BIOS/UEFI</h4>
+              <h4 className="font-semibold">1. Enable WOL in BIOS/UEFI</h4>
               <p className="text-xs text-slate-400 mt-0.5">
                 Restart target PC ➔ Enter BIOS (F2 / Del) ➔ Navigate to Power Management ➔ Enable <strong>"Wake on LAN"</strong> or <strong>"Power On By PCIe"</strong>.
               </p>
@@ -57,7 +57,7 @@ export default function WOLHelpModal({ isOpen, onClose }) {
               <Network size={18} />
             </div>
             <div>
-              <h4 className="font-semibold text-slate-200">2. Enable in Windows Network Adapter</h4>
+              <h4 className="font-semibold">2. Enable in Windows Network Adapter</h4>
               <p className="text-xs text-slate-400 mt-0.5">
                 Open Device Manager ➔ Network Adapters ➔ Right-click Ethernet card ➔ Properties ➔ Advanced tab ➔ Enable <strong>"Wake on Magic Packet"</strong>. Under Power Management tab, check <strong>"Allow this device to wake the computer"</strong>.
               </p>
@@ -70,7 +70,7 @@ export default function WOLHelpModal({ isOpen, onClose }) {
               <Zap size={18} />
             </div>
             <div>
-              <h4 className="font-semibold text-slate-200">3. Save MAC Address in LabControl</h4>
+              <h4 className="font-semibold">3. Save MAC Address in LabControl</h4>
               <p className="text-xs text-slate-400 mt-0.5">
                 Edit the PC in LabControl and enter its MAC address (e.g. <code className="text-slate-300 font-mono">AA:BB:CC:DD:EE:FF</code>). Then click <strong>"Wake Selected"</strong> to power it on!
               </p>

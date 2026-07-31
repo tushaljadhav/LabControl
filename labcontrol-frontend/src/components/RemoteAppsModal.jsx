@@ -174,14 +174,14 @@ export default function RemoteAppsModal({
               <Rocket size={22} />
             </div>
             <div>
-              <h3 className="font-bold text-lg text-white">Remote App Management</h3>
+              <h3 className="font-bold text-lg">Remote App Management</h3>
               <p className="text-xs text-slate-400">Launch utilities or terminate background processes across lab PCs</p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-elevated transition-colors"
+            className="p-2 rounded-lg text-muted hover:text-brand hover:bg-elevated transition-colors"
           >
             <X size={18} />
           </button>
@@ -200,7 +200,7 @@ export default function RemoteAppsModal({
           <div className="p-3 bg-card border border-elevated rounded-xl flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
               <Laptop size={16} className="text-brand" />
-              Target PCs: <span className="text-white font-mono">{targetCountDisplay}</span>
+              Target PCs: <span className="text-brand font-mono font-bold">{targetCountDisplay}</span>
             </div>
 
             <div className="flex items-center gap-1.5 bg-surface p-1 rounded-lg border border-elevated">
@@ -314,7 +314,7 @@ export default function RemoteAppsModal({
                           onClick={() => { setCustomPath(a.cmd); handleLaunchApp(a.cmd) }}
                           className="p-2 rounded-lg bg-surface border border-elevated hover:border-purple-500/50 hover:bg-purple-500/10 flex items-center justify-between cursor-pointer transition-all text-xs"
                         >
-                          <span className="font-semibold text-slate-200">{a.name}</span>
+                          <span className="font-semibold">{a.name}</span>
                           <div className="flex items-center gap-2">
                             <span className="font-mono text-[10px] text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
                               {a.cmd}

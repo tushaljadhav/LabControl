@@ -60,7 +60,7 @@ export default function AddLabModal({ isOpen, onClose, onLabAdded, apiBase }) {
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-lg font-semibold">Create New Lab</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+          <button onClick={onClose} className="text-muted hover:text-brand transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -68,7 +68,7 @@ export default function AddLabModal({ isOpen, onClose, onLabAdded, apiBase }) {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Lab Name *</label>
+            <label className="block text-sm font-medium text-sub mb-1">Lab Name *</label>
             <input
               type="text"
               value={name}
@@ -80,7 +80,7 @@ export default function AddLabModal({ isOpen, onClose, onLabAdded, apiBase }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Location (optional)</label>
+            <label className="block text-sm font-medium text-sub mb-1">Location (optional)</label>
             <input
               type="text"
               value={location}

@@ -33,7 +33,7 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center">
+        <div className="min-h-screen bg-base flex flex-col items-center justify-center p-6 text-center">
           <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-6 max-w-lg space-y-4 shadow-2xl">
             <h2 className="text-xl font-bold text-red-400">Application Rendering Error</h2>
             <p className="text-xs font-mono bg-slate-900 p-3 rounded text-red-300 overflow-x-auto text-left whitespace-pre-wrap">
@@ -83,7 +83,7 @@ function MainContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-400 flex items-center justify-center gap-3">
+      <div className="min-h-screen bg-base flex items-center justify-center gap-3">
         <RefreshCw size={24} className="animate-spin text-brand" />
         <span className="text-sm font-semibold">Loading LabControl...</span>
       </div>
@@ -95,7 +95,7 @@ function MainContent() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden text-slate-100 relative">
+    <div className="flex h-screen overflow-hidden relative">
       {/* Left sidebar — lab navigation, drawer on mobile */}
       <Sidebar
         labs={labs}

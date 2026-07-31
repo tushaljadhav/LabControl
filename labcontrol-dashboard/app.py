@@ -28,7 +28,7 @@ sys.path.insert(0, SERVER_DIR)
 env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 load_dotenv(dotenv_path=env_path, override=True)
 
-from database import get_all_pcs, get_logs, update_pc_status, add_log, add_pc, update_pc, delete_pc
+from database import get_all_pcs, get_logs, update_pc_status, add_log, add_pc, update_pc, delete_pc, delete_all_logs
 from database import migrate_add_labs, add_lab, get_all_labs, get_pcs_by_lab, delete_lab, update_lab
 from database import migrate_add_users, get_user_by_id, verify_user_password
 from database import migrate_add_2fa, set_2fa_secret, enable_2fa, disable_2fa
@@ -44,6 +44,16 @@ from flask_cors import CORS
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 
 app = Flask(__name__)
+
+# Configure Werkzeug to support large folder deployments (up to 500,000 files & 10 GB)
+import werkzeug.formparser
+try:
+    werkzeug.formparser.MultiPartParser.max_form_parts = 500000
+except Exception:
+    pass
+
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024 * 1024  # 10 GB payload limit
+app.config['MAX_FORM_PARTS'] = 500000
 
 # Secret key for session management
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "labcontrol-session-secret-key-2026")
@@ -534,7 +544,7 @@ def api_wake_pcs():
                 "detail": "MAC address not set for this PC"
             }
         else:
-            wol_res = send_wol_packet(mac)
+            wol_res = send_wol_packet(mac, pc["ip"])
             res = {
                 "id": pc["id"],
                 "name": pc["name"],
@@ -562,11 +572,18 @@ def api_wake_pcs():
 @app.route("/api/logs", methods=["GET"])
 @login_required
 def api_get_logs():
-    """Return recent logs. Filter by lab_id if provided."""
+    """Return recent logs from the last 24 hours. Filter by lab_id or hours if provided."""
     lab_id = request.args.get("lab_id")
-    if lab_id:
-        return jsonify(get_logs(limit=20, lab_id=int(lab_id)))
-    return jsonify(get_logs(limit=20))
+    hours = request.args.get("hours", type=int, default=24)
+    parsed_lab_id = int(lab_id) if lab_id else None
+    return jsonify(get_logs(limit=50, lab_id=parsed_lab_id, hours=hours))
+
+@app.route("/api/logs", methods=["DELETE"])
+@login_required
+def api_clear_logs():
+    """Clear all activity logs from database."""
+    delete_all_logs()
+    return jsonify({"status": "success", "message": "All activity logs cleared"})
 
 @app.route("/api/command", methods=["POST"])
 @login_required
@@ -756,11 +773,13 @@ def api_deploy_file():
     file_items = []
     for f in files:
         filename = f.filename or "file.bin"
-        content = f.read()
+        f.seek(0, os.SEEK_END)
+        filesize = f.tell()
+        f.seek(0)
         file_items.append({
             "filename": filename,
-            "bytes": content,
-            "filesize": len(content)
+            "bytes": f.stream,
+            "filesize": filesize
         })
 
     all_pcs = get_all_pcs()
@@ -776,11 +795,31 @@ def api_deploy_file():
 
     results = deploy_files_to_pcs(target_pcs, file_items, dest_dir=dest_dir)
 
+    # Group deployment status per target PC for clean single log entry
+    pc_summary = {}
     for r in results:
-        db_status = "online" if r["status"] == "success" else r["status"]
-        if "id" in r and r["id"]:
-            update_pc_status(r["id"], db_status)
-            add_log(r["id"], f"Deployed file: {r.get('filename', 'file')}", r["status"])
+        pc_id = r.get("id")
+        if not pc_id:
+            continue
+        if pc_id not in pc_summary:
+            pc_summary[pc_id] = {"success": 0, "failed": 0, "status": "success"}
+        if r.get("status") == "success":
+            pc_summary[pc_id]["success"] += 1
+        else:
+            pc_summary[pc_id]["failed"] += 1
+            pc_summary[pc_id]["status"] = r.get("status", "error")
+
+    total_files = len(file_items)
+    first_name = file_items[0]["filename"].split("/")[0] if file_items else "payload"
+
+    for pc_id, summary in pc_summary.items():
+        db_status = "online" if summary["status"] == "success" else summary["status"]
+        update_pc_status(pc_id, db_status)
+        if total_files > 1:
+            log_msg = f"Deployed folder '{first_name}' ({total_files} files)"
+        else:
+            log_msg = f"Deployed file: {first_name}"
+        add_log(pc_id, log_msg, summary["status"])
 
     return jsonify({"results": results})
 

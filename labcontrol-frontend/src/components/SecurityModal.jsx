@@ -149,7 +149,7 @@ export default function SecurityModal({ isOpen, onClose, apiBase }) {
         {/* Close Icon */}
         <button
           onClick={handleCloseModal}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-hover transition-colors"
+          className="absolute top-4 right-4 p-1.5 rounded-lg text-muted hover:text-brand hover:bg-hover transition-colors"
         >
           <X size={18} />
         </button>
@@ -160,7 +160,7 @@ export default function SecurityModal({ isOpen, onClose, apiBase }) {
             {is2FAEnabled ? <ShieldCheck size={24} /> : <ShieldAlert size={24} />}
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white">Security Settings</h2>
+            <h2 className="text-lg font-bold">Security Settings</h2>
             <p className="text-xs text-slate-400">Manage Two-Factor Authentication (2FA) for {user?.username}</p>
           </div>
         </div>

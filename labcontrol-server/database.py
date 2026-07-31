@@ -20,7 +20,7 @@ Why use a database instead of pc_list.json?
 
 import sqlite3   # Python's built-in SQLite module
 import os        # For file path handling
-from datetime import datetime  # For timestamps
+from datetime import datetime, timedelta  # For timestamps & 24h filtering
 from werkzeug.security import generate_password_hash, check_password_hash
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -301,6 +301,19 @@ def delete_pc(pc_id):
     return {"status": "success"}
 
 
+def delete_all_logs():
+    """
+    Delete all activity log entries from the database.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM logs")
+    conn.commit()
+    conn.close()
+    return {"status": "success"}
+
+
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # PC Management Functions
@@ -453,64 +466,45 @@ def add_log(pc_id, command, status):
     conn.close()
 
 
-def get_logs(limit=50, lab_id=None):
+def get_logs(limit=50, lab_id=None, hours=24):
     """
-    Get the most recent log entries, newest first. Optionally filter by lab.
-    
-    Parameters:
-        limit : How many entries to return (default: 50)
-        lab_id : Optional ID of the lab to filter logs by
-    
-    Returns:
-        A list of dictionaries like:
-        [
-            {"id": 42, "pc_name": "Lab-PC-01", "command": "shutdown", 
-             "status": "success", "timestamp": "2026-07-27 20:15:30"},
-            ...
-        ]
-    
-    We use a JOIN here — this is a SQL concept that combines data from two tables.
-    Instead of just getting pc_id (a number), we JOIN with the pcs table to get
-    the actual PC name. This makes the output human-readable.
-    
-    The SQL query reads like:
-    "Get logs, but for each log, also look up the PC name from the pcs table
-     where pcs.id matches logs.pc_id. Sort by newest first. Limit to N rows."
+    Get recent log entries from the last N hours (default 24h), newest first.
+    Optionally filter by lab. If hours is None or <= 0, returns logs regardless of age.
     """
     conn = get_connection()
     cursor = conn.cursor()
     
-    if lab_id is not None:
-        cursor.execute("""
-            SELECT 
-                logs.id,
-                pcs.name AS pc_name,
-                logs.command,
-                logs.status,
-                logs.timestamp
-            FROM logs
-            JOIN pcs ON pcs.id = logs.pc_id
-            WHERE pcs.lab_id = ?
-            ORDER BY logs.timestamp DESC, logs.id DESC
-            LIMIT ?
-        """, (lab_id, limit))
-    else:
-        cursor.execute("""
-            SELECT 
-                logs.id,
-                pcs.name AS pc_name,
-                logs.command,
-                logs.status,
-                logs.timestamp
-            FROM logs
-            JOIN pcs ON pcs.id = logs.pc_id
-            ORDER BY logs.timestamp DESC, logs.id DESC
-            LIMIT ?
-        """, (limit,))
+    query = """
+        SELECT 
+            logs.id,
+            pcs.name AS pc_name,
+            logs.command,
+            logs.status,
+            logs.timestamp
+        FROM logs
+        JOIN pcs ON pcs.id = logs.pc_id
+    """
+    conditions = []
+    params = []
     
+    if lab_id is not None:
+        conditions.append("pcs.lab_id = ?")
+        params.append(lab_id)
+        
+    if hours and hours > 0:
+        cutoff = (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
+        conditions.append("logs.timestamp >= ?")
+        params.append(cutoff)
+        
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+        
+    query += " ORDER BY logs.timestamp DESC, logs.id DESC LIMIT ?"
+    params.append(limit)
+    
+    cursor.execute(query, tuple(params))
     rows = cursor.fetchall()
     
-    # Convert to regular dictionaries
     log_list = []
     for row in rows:
         log_list.append({
